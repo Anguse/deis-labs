@@ -11,14 +11,14 @@ def my_handler(channel, data):
     print("   type   = %s" % str(msg.type))
     print("")
     print("time difference is: %s" % str(time.time()-msg.timestamp))
-#    if(msg.type == "heartbeat"):
-#	newtime = int(msg.timestamp)
-#	print("time since last heartbeat is: %s" % str(newtime-oldtime))
-#	oldtime = newtime
+    if(msg.type == "heartbeat"):
+	newtime = int(msg.timestamp)
+	print("time since last heartbeat is: %s" % str(newtime-oldtime))
+	oldtime = newtime
     
 
 lc = lcm.LCM()
-subscription = lc.subscribe("EXAMPLE_int", my_handler)
+subscription = lc.subscribe("EXAMPLE", my_handler)
 
 try:
     while True:

@@ -1,0 +1,8 @@
+package exlcm;
+struct extmsg_t
+{
+	int64_t timestamp;
+	int32_t id;
+	int32_t mode;
+	string type;
+}

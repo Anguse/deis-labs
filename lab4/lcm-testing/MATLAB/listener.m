@@ -7,7 +7,7 @@ javaaddpath ./lcm/my_types.jar
 lc = lcm.lcm.LCM.getSingleton();
 aggregator = lcm.lcm.MessageAggregator();
 
-lc.subscribe('EXAMPLE', aggregator);
+lc.subscribe('EXAMPLE_int', aggregator);
 
 while true
     disp waiting
@@ -18,15 +18,10 @@ while true
         disp(sprintf('raw bytes of received message:'))
         disp(sprintf('%d ', msg.data'))
 
-        m = exlcm.example_t(msg.data);
+        m = exlcm.extmsg_t(msg.data);
 
         disp(sprintf('decoded message:\n'))
-        disp([ 'timestamp:   ' sprintf('%d ', m.timestamp) ])
-        disp([ 'position:    ' sprintf('%f ', m.position) ])
-        disp([ 'orientation: ' sprintf('%f ', m.orientation) ])
-        disp([ 'ranges:      ' sprintf('%f ', m.ranges) ])
-        disp([ 'name:        ' char(m.name) ])
-        disp([ 'enabled:     ' sprintf('%d ', m.enabled) ])
+        disp([ 'id:   ' sprintf('%d ', m.id) ])
     end
 end
 

@@ -1,0 +1,7 @@
+package exlcm;
+struct detectmsg_t
+{
+    int64_t  timestamp;
+    string  type;
+}
+

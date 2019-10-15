@@ -48,6 +48,8 @@ mode = 0;
 global lc;
 global aggregator;
 global aggregator2;
+javaaddpath ./lcm/lcm.jar
+javaaddpath ./lcm/my_types.jar
 lc = lcm.lcm.LCM.getSingleton();
 aggregator = lcm.lcm.MessageAggregator();
 lc.subscribe('EXAMPLE_int', aggregator);
@@ -60,6 +62,9 @@ global timerstarted;
 timerstarted = 0;
 global modechanged;
 modechanged = 0;
+%ID
+global robotID;
+robotID = 1;
 % End initialization code - DO NOT EDIT
 end
 
@@ -92,7 +97,6 @@ function varargout = brakelight_gui_OutputFcn(hObject, eventdata, handles)
 % Get default command line output from handles structure
 varargout{1} = handles.output;
 end
-
 
 function brakelight_Callback(hObject, eventdata, handles)
 % hObject    handle to brakelight (see GCBO)
@@ -127,7 +131,7 @@ global mode;
 mode = 1;
 global modechanged;
 modechanged = 1;
-printfcn(handles);
+printfcn(hObject, handles);
 end
 
 % --- Executes on button press in mode_zero_button.
@@ -141,7 +145,7 @@ global mode;
 mode = 0;
 global modechanged;
 modechanged = 1;
-printfcn(handles);
+printfcn(hObject, handles);
 end
 
 % --- Executes on button press in mode_two_button.
@@ -155,17 +159,20 @@ global mode;
 mode = 2;
 global modechanged;
 modechanged = 1;
-printfcn(handles);
+printfcn(hObject, handles);
 end
 
-function setBrake(handles)
+function [handles_out] = setBrake(handles)
+display("Break")
 set(handles.brake_light, 'String', "brake");
 set(handles.brake_light, 'BackgroundColor', "red");
+handles_out = handles;
 end
 
-function resetBrake(handles)
+function [handles_out] = resetBrake(handles)
 set(handles.brake_light, 'String', "no brake");
 set(handles.brake_light, 'BackgroundColor', "green");
+handles_out = handles;
 end
 
 % --- Executes on button press in enable_brakelight.
@@ -175,10 +182,10 @@ function enable_brakelight_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of enable_brakelight
-printfcn(handles);
+printfcn(hObject, handles);
 end
 
-function printfcn(handles)
+function printfcn(hobject, handles)
 %this is the function running for lcm when activated
 global t;
 global timerstarted;
@@ -188,42 +195,56 @@ if(get(handles.enable_brakelight, 'value'))
     global aggregator2;
     global lc;
     global mode;
+    global robotID;
     
     while true
-        millis_to_wait = 1000;
+        millis_to_wait = 100;
         msg = aggregator.getNextMessage(millis_to_wait);
         msg2 = aggregator2.getNextMessage(millis_to_wait);
         if length(msg) > 0
             m = exlcm.detectmsg_t(msg.data);
+            disp([ 'timestamp:   ' sprintf('%d ', m.timestamp) ])
             sendmsg = exlcm.detectmsg_t();
+            sendmsg_ext = exlcm.extmsg_t();
             if (mode == 0)
                 if not(t == 0)
                     stop(t);
                     t = 0;
                 end
                 if equals(m.type, "alert")
-                    setBrake(handles);
+                    handles = setBrake(handles);
+                    guidata(hobject, handles);
+                    pause(0.1)
                 else
-                    resetBrake(handles);
+                    handles = resetBrake(handles);
+                    guidata(hobject, handles);
+                    pause(0.1)
                 end
             end
             if (mode == 1)
                 if equals(m.type, "alert")
-                    setBrake(handles);
-                    if not(equals(t, 0))
+                    handles = setBrake(handles);
+                    guidata(hobject, handles);
+                    pause(0.1)
+                    if not(t == 0)
                         stop(t);
                         t = 0;
                     end
-                    sendmsg.timestamp = datestr(now,'HH:MM:SS.FFF');
+                    sendmsg.timestamp = now;
                     sendmsg.type = "alert";
-                    sendmsg.mode = 1;
-                    lc.publish('EXAMPLE_ext', sendmsg);
+                    sendmsg_ext.timestamp = now;
+                    sendmsg_ext.type = "alert";
+                    sendmsg_ext.mode = mode;
+                    sendmsg_ext.id = robotID;
+                    lc.publish('EXAMPLE_ext', sendmsg_ext);
                     lc.publish('EXAMPLE_int', sendmsg);
                 else
-                    resetBrake(handles);
+                    handles = resetBrake(handles);
+                    guidata(hobject, handles);
+                    pause(0.1)
                     %timer for heartbeatmsg
                     if or((modechanged == 1), (timerstarted == 0))
-                        if not(equals(t, 0))
+                        if not(t == 0)
                             stop(t);
                             t = 0;
                         end
@@ -236,25 +257,34 @@ if(get(handles.enable_brakelight, 'value'))
             end
         end
         if length(msg2) > 0
-            m_ext = exlcm.detectmsg_t(msg.data);
+            m_ext = exlcm.extmsg_t(msg2.data);
             sendmsg = exlcm.detectmsg_t();
+            sendmsg_ext = exlcm.extmsg_t();
+            disp([ 'timestamp:   ' sprintf('%d ', m_ext.timestamp) ])
             if (mode == 2)
-                if equals(m_ext.type, "alert")
-                    setBrake(handles);
-                    if not(equals(t, 0))
+                if (equals(m_ext.type, "alert") && not(m_ext.id == robotID))
+                    handles = setBrake(handles);
+                    guidata(hobject, handles);
+                    pause(0.1)
+                    if not(t == 0)
                         stop(t);
                         t = 0;
                     end
-                    sendmsg.timestamp = datestr(now,'HH:MM:SS.FFF');
+                    sendmsg.timestamp = now;
                     sendmsg.type = "alert";
-                    sendmsg.mode = 1;
-                    lc.publish('EXAMPLE_ext', sendmsg);
+                    sendmsg_ext.timestamp = now;
+                    sendmsg_ext.type = "alert";
+                    sendmsg_ext.mode_ext = 1;
+                    sendmsg_ext.id = robotID;
+                    lc.publish('EXAMPLE_ext', sendmsg_ext);
                     lc.publish('EXAMPLE_int', sendmsg);
                 else
-                    resetBrake(handles);
+                    handles = resetBrake(handles);
+                    guidata(hobject, handles);
+                    pause(0.1)
                     %timer for heartbeatmsg
                     if or((modechanged == 1), (timerstarted == 0))
-                        if not(equals(t, 0))
+                        if not(t == 0)
                             stop(t);
                             t = 0;
                         end
@@ -277,18 +307,9 @@ end
 
 function sendheartbeat(heartbeatmode)
 global lc;
-sendmsg = exlcm.detectmsg_t();
-sendmsg.timestamp = datestr(now,'HH:MM:SS.FFF');
+sendmsg = exlcm.detectmsg_t_ext();
+sendmsg.timestamp = now;
 sendmsg.type = "heartbeat";
 sendmsg.mode = heartbeatmode;
-lc.publish('EXAMPLE', sendmsg);
-
-%%braking
-bl = 1;
-%setting or resetting brakelight
-if (bl == 1)
-    setBrake(handles);
-else
-    resetBrake(handles);
-end
+lc.publish('EXAMPLE_ext', sendmsg);
 end
