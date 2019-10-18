@@ -1,0 +1,4 @@
+#!/bin/bash
+
+trap 'kill %1; kill %2' SIGINT
+python ../controller-sim.py 2 & python ../controller-sim.py 3 & python ../controller-sim.py 4 
