@@ -95,9 +95,14 @@ def action_cb(data):
 		if(rightWheelSpeed < 0):
 			rightWheelSpeed = -rightWheelSpeed+128
 		endMarker = '\n'
-		arduinoData.write(chr(mode)+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
+		arduinoData.write(chr(action_id)+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
 	elif(action_id == 'h'):
-		print("free")
+		print("setMode")
+                payload_params = msg
+                newMode = int(msg[0])
+                endMarker = '\n'
+                arduinoData.write(chr(action_id)+chr(newMode)+endMarker)
+                mode = newMode
 	elif(action_id == 'i'):
 		print("free")
 	elif(action_id == 'k'):
@@ -139,6 +144,12 @@ def heartbeat_cb(data):
 def feedback_cb(data):
     rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
 
+def internal_cb(data):
+    rospy.loginfo(rospy.get_caller_id() + 'internal %s', data.data)
+    ## timestamp,mode,action
+    params = data.data.split(',')	
+
+
 def listener():
 
     # In ROS, nodes are uniquely named. If two nodes with the same
@@ -152,6 +163,7 @@ def listener():
     rospy.Subscriber('action', String, action_cb)
     rospy.Subscriber('heartbeat', String, heartbeat_cb)
     rospy.Subscriber('feedback', String, feedback_cb)
+    rospy.Subscriber('internal' String, internal_cb)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()

@@ -1,6 +1,12 @@
 
 #include <RedBot.h>  
+
+#define ACTION_SET_SPEED h
+#define ACTION_SET_MODE  g
+#define LINE_FOLLOWING   0
+
 RedBotMotors motors; 
+int serialDataAction;
 int serialDataMode;
 int serialDataLeft;
 int serialDataRight;
@@ -38,21 +44,27 @@ void loop(){
 
     recvWithEndMarker();
     if(newData){
-      serialDataMode = receivedChars[0];
-      serialDataLeft = receivedChars[1];
-      serialDataRight = receivedChars[2];
-      
-      if((serialDataLeft - 128) > 0){
-        serialDataLeft -= 128;
-        serialDataLeft = -serialDataLeft;
+      serialDataAction = receivedChars[0];
+      if(serialDataAction == ACTION_SET_SPEED && mode != LINE_FOLLOWING){
+      	serialDataLeft = receivedChars[1];
+      	serialDataRight = receivedChars[2];
+	if((serialDataLeft - 128) > 0){
+	  serialDataLeft -= 128;
+	  serialDataLeft = -serialDataLeft;
+	}
+	if((serialDataRight - 128) > 0){
+	  serialDataRight -= 128;
+	  serialDataRight = -serialDataRight;        
+	}
+	motors.leftMotor(-serialDataLeft);
+	motors.rightMotor(serialDataRight);
+      }else if(serialDataAction == ACTION_SET_MODE){
+	serialDataMode = receivedChars[1];
+	mode = serialDataMode;
       }
-      if((serialDataRight - 128) > 0){
-        serialDataRight -= 128;
-        serialDataRight = -serialDataRight;        
-      }
-      
-      motors.leftMotor(-serialDataLeft);
-      motors.rightMotor(serialDataRight);
       newData = false;
     }
+   if(mode == LINE_FOLLOLWING){
+       //LINE FOLLOWING CODE GOES HERE
+   }
 }  
