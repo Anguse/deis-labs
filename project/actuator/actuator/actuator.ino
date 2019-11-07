@@ -1,5 +1,5 @@
 
-#include <RedBot.h>  
+#include <RedBot.h>
 
 #define ACTION_SET_MODE  104
 #define ACTION_SET_SPEED 103
@@ -10,7 +10,7 @@
 #define LINETHRESHOLD    700
 #define SPEED            60
 
-RedBotMotors motors; 
+RedBotMotors motors;
 RedBotSensor left_outer = RedBotSensor(A0);
 RedBotSensor left = RedBotSensor(A3);
 RedBotSensor center = RedBotSensor(A1);
@@ -31,13 +31,13 @@ void setup()
 {
   Serial.begin(9600);
   mode = LISTENING;
-  
+
 }
 void recvWithEndMarker() {
     static byte ndx = 0;
     char endMarker = '\n';
     char rc;
-   
+
     while (Serial.available() > 0 && newData == false) {
         rc = Serial.read();
 
@@ -53,7 +53,7 @@ void recvWithEndMarker() {
             ndx = 0;
             newData = true;
         }
-    } 
+    }
 }
 void loop(){
 
@@ -69,7 +69,7 @@ void loop(){
   	  }
   	  if((serialDataRight - 128) > 0){
   	    serialDataRight -= 128;
-  	    serialDataRight = -serialDataRight;        
+  	    serialDataRight = -serialDataRight;
   	  }
   	  motors.leftMotor(-serialDataLeft);
   	  motors.rightMotor(serialDataRight);
@@ -81,10 +81,10 @@ void loop(){
     }
    if(mode == LINE_FOLLOWING){
        //LINE FOLLOWING CODE GOES HERE
-     if((((left_outer.read() > LINETHRESHOLD) && (right_outer.read() > LINETHRESHOLD)) || ((left_outer.read() < LINETHRESHOLD) && (right_outer.read() < LINETHRESHOLD))) 
+     if((((left_outer.read() > LINETHRESHOLD) && (right_outer.read() > LINETHRESHOLD)) || ((left_outer.read() < LINETHRESHOLD) && (right_outer.read() < LINETHRESHOLD)))
           && !((left.read() > LINETHRESHOLD) && (center.read() > LINETHRESHOLD) && (right.read() > LINETHRESHOLD)))
     {
-      leftSpeed = -SPEED; 
+      leftSpeed = -SPEED;
       rightSpeed = SPEED;
     }
     // if only left is black -> move to right
@@ -103,7 +103,6 @@ void loop(){
       leftSpeed = 0;
       rightSpeed = 0;
     }
-    
     // if all sensors are on black or up in the air, stop the motors.
     // otherwise, run motors given the control speeds above.
     if((left.read() > LINETHRESHOLD) && (center.read() > LINETHRESHOLD) && (right.read() > LINETHRESHOLD) && (right_outer.read() > LINETHRESHOLD) && (left_outer.read() > LINETHRESHOLD) )
@@ -114,6 +113,6 @@ void loop(){
     {
       motors.leftMotor(leftSpeed);
       motors.rightMotor(rightSpeed);
-    } 
+    }
    }
-}  
+}
