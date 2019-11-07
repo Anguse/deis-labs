@@ -1,0 +1,78 @@
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include <vector>
+#include <sstream>
+
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "talker");
+  ros::NodeHandle n;
+  ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
+  ros::Rate loop_rate(1000);
+
+  std::vector<std::string> badjokes;
+
+  int counter=0;
+
+  badjokes.push_back("Jack: Why was the robot angry?");
+  badjokes.push_back("Ben: Beats me.");
+  badjokes.push_back("Jack: Because someone kept pushing his buttons!");
+  badjokes.push_back("from http://boyslife.org/about-scouts/merit-badge-resources/robotics/19223/robot-jokes/\n");
+
+  badjokes.push_back("Ron: What is a robot's favorite type of music?");
+  badjokes.push_back("John: I really don't know.");
+  badjokes.push_back("Ron: Heavy metal!");
+  badjokes.push_back("from http://boyslife.org/about-scouts/merit-badge-resources/robotics/19223/robot-jokes/\n");
+
+  badjokes.push_back("Griffin: Why did the robot go back to robot school?");
+  badjokes.push_back("Brent: Tell me.");
+  badjokes.push_back("Griffin: Because his skills were getting a little rusty!");
+  badjokes.push_back("from http://boyslife.org/about-scouts/merit-badge-resources/robotics/19223/robot-jokes/\n");
+
+  badjokes.push_back("Lance: What do you get when you cross a robot and a tractor?");
+  badjokes.push_back("Jerry: Dunno. What?");
+  badjokes.push_back("Lance: A trans-farmer!");
+  badjokes.push_back("from http://boyslife.org/about-scouts/merit-badge-resources/robotics/19223/robot-jokes/\n");
+
+  badjokes.push_back("Billy: What did the man say to his dead robot?");
+  badjokes.push_back("Bob: What?");
+  badjokes.push_back("Billy: Rust in peace.");
+  badjokes.push_back("from http://boyslife.org/about-scouts/merit-badge-resources/robotics/19223/robot-jokes/\n");
+
+
+  int count = 0;
+  while (ros::ok()){
+    sleep(1);
+
+    std_msgs::String msg;
+    std::stringstream ss;
+
+    ss << badjokes[counter];
+    ++counter;
+
+    if(counter >= badjokes.size()){
+      counter=0;
+    }
+
+/*
+    if(count%2==1)
+      ss << badjokes[0];
+    else
+      ss << badjokes[1];
+*/
+
+    //ss << "hello world " << count;
+    msg.data = ss.str();
+
+    ROS_INFO("%s", msg.data.c_str());
+    chatter_pub.publish(msg);
+    ros::spinOnce();
+    loop_rate.sleep();
+    ++count;
+  }
+  return 0;
+}
+
+/*
+
+*/

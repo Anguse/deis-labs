@@ -50,11 +50,29 @@ mode = 0 # single vehicle mode
 
 def callback(data):
     rospy.loginfo(rospy.get_caller_id() + 'I heard %s', data.data)
+def gps_cb(data):
+	states = data.data.split(';')
+	state = states[0].replace('[', '')
+	params = state.split(' ')
+	x = params[0]
+	y = params[1]
+	z = params[2]
+	ID = params[3]
+	theta = params[4]
+	
+	print("")
+	print("              x: %s" %x)
+	print("              y: %s" %y)
+	print("              z: %s" %z)
+	print("             ID: %s" %ID)
+	print("          theta: %s" %theta)
+	print("")
+
+
 
 # Example outputs
 #[INFO] [1455208221.162028]: /listener_1451_1455208187311action 1571383446.15,g,-1,-1,-2,255;255
 def action_cb(data):
-	rospy.loginfo(rospy.get_caller_id() + ' action %s', data.data)
 	params = data.data.split(',')	
 	timestamp = params[0]
 	action_id = params[1]
@@ -95,7 +113,7 @@ def action_cb(data):
 		if(rightWheelSpeed < 0):
 			rightWheelSpeed = -rightWheelSpeed+128
 		endMarker = '\n'
-		arduinoData.write(chr(action_id)+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
+		arduinoData.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
 	elif(action_id == 'h'):
 		print("setMode")
                 payload_params = msg
@@ -144,12 +162,6 @@ def heartbeat_cb(data):
 def feedback_cb(data):
     rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
 
-def internal_cb(data):
-    rospy.loginfo(rospy.get_caller_id() + 'internal %s', data.data)
-    ## timestamp,mode,action
-    params = data.data.split(',')	
-
-
 def listener():
 
     # In ROS, nodes are uniquely named. If two nodes with the same
@@ -159,11 +171,10 @@ def listener():
     # run simultaneously.
     rospy.init_node('listener', anonymous=True)
 
-    #rospy.Subscriber('josefoutput', String, callback)
+    rospy.Subscriber('josefoutput', String, gps_cb)
     rospy.Subscriber('action', String, action_cb)
     rospy.Subscriber('heartbeat', String, heartbeat_cb)
     rospy.Subscriber('feedback', String, feedback_cb)
-    rospy.Subscriber('internal' String, internal_cb)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()

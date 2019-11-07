@@ -1,0 +1,1323 @@
+
+//INCLUDES
+
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include <kobuki_msgs/Sound.h>
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <turtlebot_msgs/SetFollowState.h>
+#include <kobuki_msgs/BumperEvent.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <kobuki_msgs/Led.h>
+#include <sound_play/sound_play.h>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>  
+#include <sstream>
+#include <iostream>
+#include <ctime>
+#include <string>
+#include <vector>
+#include <unistd.h>
+#include <database_interface/db_class.h>
+#include <boost/shared_ptr.hpp>
+#include <database_interface/postgresql_database.h>
+#include <SFML/Audio.hpp>
+#include <iomanip>
+#include <stdio.h>
+
+
+
+//DEFINES
+
+#define padding 15
+#define base_width 300 
+#define button_pannel_w base_width
+#define button_pannel_l 50
+#define total_width (base_width+ (2*padding) + 700)
+#define total_length ((base_width+ button_pannel_l + (2*padding) +200) +200)
+#define FOLLOWING 1
+#define MANUAL 2
+#define NAVIGATING_USING_MAP 3
+#define VACUUMING 4
+#define WAITING 5
+#define WAITING_FOR_EMS 6
+#define TALKATIVE 1
+#define LACONIC 2
+#define PI 3.14159265
+#define LIMIT_ON_NUM_PHRASES_TO_REMEMBER 1000
+#define NOT_YET_DECIDED 17
+#define CALL_MEDICAL_SERVICES 27
+#define GO_BACK_TO_WORK 37
+
+
+
+//NAMESPACES
+
+using namespace std;
+using namespace cv;
+
+
+
+//FUNCTION DECLARATIONS
+
+void drawStuff();
+float sign(float p1_x, float p1_y, float p2_x, float p2_y, float p3_x, float p3_y);
+bool pointInTriangle(float pt_x, float pt_y, float v1_x, float v1_y, float v2_x, float v2_y, float v3_x, float v3_y);
+void mouseCallBackFunc(int event, int x, int y, int flags, void* userdata);
+void sleepok(int t, ros::NodeHandle &nh);
+void bumperCallback(const kobuki_msgs::BumperEvent msg);
+void restoreRobot();
+void databaseInit();
+int playWav(int soundIndex);
+
+
+
+//GLOBAL VARS
+
+//interface
+char aWin[] = "Anomaly Investigator Robot";
+int followButton_x1=padding;  
+int followButton_y1=base_width + (2*padding); 
+int followButton_x2=base_width + padding; 
+int followButton_y2=base_width + padding + button_pannel_l; 
+int vacuumButton_x1=padding;  
+int vacuumButton_y1=followButton_y2 + padding; 
+int vacuumButton_x2=base_width+ padding; 
+int vacuumButton_y2=vacuumButton_y1 + button_pannel_l - padding; 
+int verbosityButton_x1=padding;  
+int verbosityButton_y1=vacuumButton_y2 + padding; 
+int verbosityButton_x2=base_width + padding; 
+int verbosityButton_y2=verbosityButton_y1 + button_pannel_l - padding; 
+int startOfMoveButtons_x= padding;
+int startOfMoveButtons_y= base_width + (4*padding);
+int restore_pos_x=170;
+int restore_pos_y=560;
+int timerbutton_x=170;
+int timerbutton_y=610;
+int up_rgb[] = {255, 255, 255};
+int bottom_rgb[] = {255, 255, 255};
+int right_rgb[] = {255, 255, 255};
+int left_rgb[] = {255, 255, 255};
+int default_rgb[] = {255, 255, 255};
+int off_rgb[] = {127, 127, 127};
+Mat image;
+Mat mapImage;
+Mat mapImage_smaller;
+
+
+//logic/ros
+int DATABASE_CONNECTED = 0;
+int ROBOT_VERBOSITY=TALKATIVE;
+int ROBOT_CONTROL_STATE =MANUAL;
+int ROBOT_IS_MOVING = 0;
+int robotHasPlayedBackSound=0;
+int lastBumperMessage=-1;
+int OKAY_TO_MOVE = 0;
+int numberOfTimeouts=0;
+int robotReaction=NOT_YET_DECIDED;
+time_t lastTimeBumperEventProcced;
+time_t lastMotionEventProcced;
+time_t lastDatabaseCheck;
+time_t timeStartedWaiting;
+time_t timeStartedWaiting2;
+time_t timeReceivedNotication=0;
+time_t timeReachedDestination=0;
+time_t userSpecifiedTime=0;
+std::vector<std::string> robot_bumper_messages;
+std::vector<int> said_bumper_message_recently;
+std::vector<std::string> robot_emergency_messages;
+std::vector<int> said_emergency_message_recently;
+std::vector<std::string> robot_wavfile_names;
+std::vector<int> used_wavfile_recently;
+std::vector<sf::SoundBuffer> sounds;
+std::deque<geometry_msgs::Twist> scheduledMovements;
+std::deque<std::string> spokenConversation;
+kobuki_msgs::Sound msg;
+geometry_msgs::Twist currentMovementCommand;
+database_interface::PostgresqlDatabase database("192.168.10.5", "5432", "user2", "password", "martins_db"); //router
+//database_interface::PostgresqlDatabase database("192.168.60.163", "5432", "user2", "password", "martins_db"); //robotic network
+sf::Sound currentSound;
+
+
+
+//CLASSES
+
+class rosStuff{
+  public:
+  ros::NodeHandle n;
+  ros::Publisher motor_pub;
+  ros::Publisher sound_pub; 
+  ros::Publisher blink_pub;
+  ros::Publisher blink_pub2;
+  ros::Publisher goal_publisher;   
+  sound_play::SoundClient sc;
+  turtlebot_msgs::SetFollowState followCommand;
+  geometry_msgs::Twist movementCommand;
+  ros::Subscriber bumper_sub;
+  kobuki_msgs::LedPtr led_msg_ptr;
+  geometry_msgs::PoseStamped aPose;    
+  ros::Subscriber speechrec_sub;
+
+  void bumperCallback(const kobuki_msgs::BumperEvent msg); 
+  void localizationCallback(const geometry_msgs::PoseWithCovarianceStamped);  
+  void initBumper();
+  void initLocalization();  
+  void databaseCheck();
+  void checkForNotifications();
+  void vacuum_clean();
+  void moveForwardAWeeBit();
+  void moveBackwardAWeeBit();
+  void turnRandomly(double magnitudeOfTurn);
+  void largeTurn();
+  void reactToEmergency(std::string& locationOfEmergency);
+  void stopVacuuming();
+  void checkIfIShouldDoSomething();
+  void speechRecCallback(std_msgs::String s);
+  void initSpeechRecognition();
+
+};
+
+
+class Task : public database_interface::DBClass{
+  public:
+  database_interface::DBField<int> key_column_;
+  database_interface::DBField<int> task_id_;
+  database_interface::DBField<std::string> task_name_;
+  database_interface::DBField<int> priority_;
+
+  Task() :
+    key_column_(database_interface::DBFieldBase::TEXT, this, "key_column", "martin_places2", true),
+    task_id_(database_interface::DBFieldBase::TEXT, this, "task_id", "martin_places2", true),
+    task_name_(database_interface::DBFieldBase::TEXT, this, "task_name", "martin_places2", true),
+    priority_(database_interface::DBFieldBase::TEXT, this, "priority", "martin_places2", true)  
+  {
+    primary_key_field_ = &key_column_;
+    fields_.push_back(&task_id_);
+    fields_.push_back(&task_name_);
+    fields_.push_back(&priority_);
+
+    setAllFieldsReadFromDatabase(true);
+    setAllFieldsWriteToDatabase(true);
+  }
+};
+
+
+class Robot_Pose : public database_interface::DBClass{
+  public:
+  database_interface::DBField<int> timestamp_;
+  database_interface::DBField<double> x_;
+  database_interface::DBField<double> y_;
+  database_interface::DBField<double> theta_;
+
+  Robot_Pose() :
+    timestamp_(database_interface::DBFieldBase::TEXT, 
+		this, "timestamp", "robot_pose", true),
+    x_(database_interface::DBFieldBase::TEXT, 
+		this, "x", "robot_pose", true),
+    y_(database_interface::DBFieldBase::TEXT, 
+		   this, "y", "robot_pose", true),
+    theta_(database_interface::DBFieldBase::TEXT, 
+		 this, "theta", "robot_pose", true)  
+  {
+    primary_key_field_ = &timestamp_;
+    fields_.push_back(&x_);
+    fields_.push_back(&y_);
+    fields_.push_back(&theta_);
+
+    setAllFieldsReadFromDatabase(true);
+    setAllFieldsWriteToDatabase(true);
+  }
+};
+
+
+
+// FUNCTION DEFINITIONS
+
+int main(int argc, char **argv){
+  
+  ros::init(argc, argv, "anomalybot_gui");
+  ROS_INFO("Robot Response to Anomalies: Nov 2014");
+  
+  //init stuff
+  robot_bumper_messages.push_back("such pain");  said_bumper_message_recently.push_back(0);
+  robot_bumper_messages.push_back("ouch my gears"); said_bumper_message_recently.push_back(0);
+  robot_bumper_messages.push_back("do you mind?");  said_bumper_message_recently.push_back(0);
+  robot_bumper_messages.push_back("why wasn't I born a Roomba?"); said_bumper_message_recently.push_back(0);  
+  robot_bumper_messages.push_back("if only I had a laser"); said_bumper_message_recently.push_back(0);
+
+  robot_emergency_messages.push_back("leaping lizards something has happened");  said_emergency_message_recently.push_back(0);
+  robot_emergency_messages.push_back("oh gosh it's an emergency");  said_emergency_message_recently.push_back(0); 
+  robot_emergency_messages.push_back("oh gosh oh gosh oh gosh");  said_emergency_message_recently.push_back(0);   
+  robot_emergency_messages.push_back("why is it always on my shift?");  said_emergency_message_recently.push_back(0); 
+  robot_emergency_messages.push_back("not again, why can't my owners live healthier?");  said_emergency_message_recently.push_back(0); 
+  robot_emergency_messages.push_back("an advanced sensing system and they have me doing this kind of job");  said_emergency_message_recently.push_back(0);   
+  
+  robot_wavfile_names.push_back("/home/user2/audio_files/v_start2.wav");  used_wavfile_recently.push_back(0);  
+  robot_wavfile_names.push_back("/home/user2/audio_files/v_end.wav");  used_wavfile_recently.push_back(0);    
+  robot_wavfile_names.push_back("/home/user2/audio_files/v1_middle.wav");  used_wavfile_recently.push_back(0);  
+  robot_wavfile_names.push_back("/home/user2/audio_files/v2_middle.wav");  used_wavfile_recently.push_back(0);  
+
+  sf::SoundBuffer aBuffer;
+  for(int i=0; i < 4; ++i){ 
+    sounds.push_back(aBuffer);
+  }
+/*
+  if((!sounds[0].LoadFromFile(robot_wavfile_names[0])) || (!sounds[1].LoadFromFile(robot_wavfile_names[1])) || (!sounds[2].LoadFromFile(robot_wavfile_names[2])) || (!sounds[3].LoadFromFile(robot_wavfile_names[3]))){
+     ROS_INFO("PROBLEM LOADING WAV FILES");
+     return -1;
+  }
+  */
+  if((!sounds[0].loadFromFile(robot_wavfile_names[0])) || (!sounds[1].loadFromFile(robot_wavfile_names[1])) || (!sounds[2].loadFromFile(robot_wavfile_names[2])) || (!sounds[3].loadFromFile(robot_wavfile_names[3]))){
+     ROS_INFO("PROBLEM LOADING WAV FILES");
+     return -1;
+  }
+  time_t t = time(0);   // get time now
+  lastTimeBumperEventProcced=t-20;
+  lastMotionEventProcced=t-20;
+  lastDatabaseCheck=t-20;
+  srand (time(NULL));
+  timeStartedWaiting = time(0);
+  
+  rosStuff stuff;
+  stuff.motor_pub = stuff.n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 10); //1000
+  stuff.sound_pub = stuff.n.advertise<kobuki_msgs::Sound>("/mobile_base/commands/sound", 10);  
+  stuff.blink_pub = stuff.n.advertise<kobuki_msgs::Led>("/mobile_base/commands/led1", 10);
+  stuff.blink_pub2 = stuff.n.advertise<kobuki_msgs::Led>("/mobile_base/commands/led2", 10);
+  stuff.goal_publisher = stuff.n.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 10); 
+  stuff.led_msg_ptr.reset(new kobuki_msgs::Led());
+  stuff.led_msg_ptr->value = kobuki_msgs::Led::BLACK; //kobuki_msgs::Led::GREEN;
+  stuff.blink_pub.publish(stuff.led_msg_ptr);
+  stuff.blink_pub2.publish(stuff.led_msg_ptr);  
+  
+  stuff.initBumper();
+  stuff.initLocalization();
+  stuff.initSpeechRecognition();
+  
+  stuff.movementCommand.linear.x = 0.0;
+  stuff.movementCommand.linear.y = 0.0;  
+  stuff.movementCommand.linear.z = 0.0;       
+  stuff.movementCommand.angular.x = 0.0;
+  stuff.movementCommand.angular.y = 0.0;  
+  stuff.movementCommand.angular.z = 0.0;   
+  
+  stuff.aPose.header.frame_id = "map";
+  stuff.aPose.header.stamp = ros::Time::now();  
+  stuff.aPose.pose.position.x =0.48248;
+  stuff.aPose.pose.position.y =0.13719;
+  stuff.aPose.pose.position.z =0.0;
+  stuff.aPose.pose.orientation.x =0.0;
+  stuff.aPose.pose.orientation.y =0.0;
+  stuff.aPose.pose.orientation.z =0.0; 
+  
+  geometry_msgs::Quaternion test;
+  test.x=1.0;
+  test.y=1.0; 
+  test.z=1.0;
+  test.w=1.0;
+     
+  ros::Rate loop_rate(10);
+  
+  databaseInit();
+  
+  namedWindow(aWin, 1);
+  setMouseCallback(aWin, mouseCallBackFunc, &stuff); 
+  moveWindow(aWin, 0, 200);
+
+  drawStuff();
+
+  loop_rate.sleep();
+  loop_rate.sleep();
+  loop_rate.sleep();	      
+  ros::spinOnce();
+  loop_rate.sleep();
+
+  int keyPressed=0;
+  while(keyPressed!=27 && ros::ok()){ //27 is ESC
+    ros::spinOnce();
+    loop_rate.sleep();
+    keyPressed= waitKey(10); 
+
+    stuff.checkForNotifications();
+    stuff.vacuum_clean();
+    stuff.checkIfIShouldDoSomething();
+  
+  }
+
+  return 0;
+}
+
+
+void rosStuff::initSpeechRecognition(){ 
+  
+  speechrec_sub = n.subscribe("recognizer/output", 1000, &rosStuff::speechRecCallback, this);
+}
+
+
+void rosStuff::speechRecCallback(std_msgs::String s){
+  
+  time_t t = time(0); 
+  if(ROBOT_CONTROL_STATE == WAITING  && (t > timeStartedWaiting +5)){  //only push_back if robot is in listening state and cares
+    std::string wordsSpoken =  s.data;
+    spokenConversation.push_back(wordsSpoken);
+
+    while(spokenConversation.size() > LIMIT_ON_NUM_PHRASES_TO_REMEMBER){ //hopefully won't get here
+      spokenConversation.pop_front();
+    }
+  }
+  
+  ros::spinOnce();
+}  
+
+
+void rosStuff::vacuum_clean(){
+
+  //is it time to move? turn randomly, move forward a small distance
+  if(ROBOT_CONTROL_STATE == VACUUMING){
+    ros::Rate loop_rate(10);
+    if(scheduledMovements.empty()){   //if empty replenish
+      turnRandomly(3.0); //rotate in a large motion
+      //moveForwardAWeeBit(); //uncomment to make robot move a little forward  
+    }
+    else{
+      motor_pub.publish(scheduledMovements[0]);
+      ros::spinOnce(); 
+      loop_rate.sleep();     
+      scheduledMovements.pop_front();     
+    }
+  
+    //is it time to play back sound? start, dont block while playing sounds
+    if(currentSound.GetStatus() == sf::Sound::Stopped){
+      if(!robotHasPlayedBackSound){                  //first time
+        robotHasPlayedBackSound= 1;
+        playWav(0);	
+
+	ros::Rate loop_rate(10);
+	ros::spinOnce();
+	if(n.ok()){
+	  sc.playWave("/home/turtlebot/Sounds/v_start.wav");
+	  ros::spinOnce();
+	  loop_rate.sleep(); 
+	}	
+      }
+      else{
+        playWav(2); 
+	
+	ros::Rate loop_rate(10);
+	ros::spinOnce();
+	if(n.ok()){
+	  sc.playWave("/home/turtlebot/Sounds/v1_middle.wav");
+	  ros::spinOnce();
+	  loop_rate.sleep(); 
+	}
+      }
+    }
+  }  
+}
+
+
+void rosStuff::checkIfIShouldDoSomething(){
+  
+  //has human said yes or no or have we had a timeout?
+  time_t t = time(0); 
+  
+  //ensure checks are not too frequent??
+  if(ROBOT_CONTROL_STATE == WAITING && (t > timeStartedWaiting +5)){ 
+      
+    while((robotReaction==NOT_YET_DECIDED) && !spokenConversation.empty()){
+      ROS_INFO("size of spoken word list %d", ((int)spokenConversation.size()));
+      std::string wordsSpoken = spokenConversation.at(0);
+      spokenConversation.pop_front();
+      std::stringstream ss(wordsSpoken);
+      std::string aWord;
+      while((ss >> aWord) && (robotReaction==NOT_YET_DECIDED)){
+	if(aWord == "yes"){
+	  ROS_INFO("Human said yes to calling medical services");
+	  robotReaction=CALL_MEDICAL_SERVICES;	
+        }
+        else if(aWord == "no"){
+	  ROS_INFO("Human said no to calling medical services");	
+	  robotReaction=GO_BACK_TO_WORK;
+        }
+        else{
+	  ROS_INFO("OTHER: %s", aWord.c_str());  
+        }
+      } //end inner while
+    } //end while
+  
+    if(robotReaction==NOT_YET_DECIDED){ //if no spoken response yet, did we have a timeout?? will groaning or babbling be dangerous though?
+      //is it time to move? 
+  
+      if((t > (timeStartedWaiting  + 10))){  
+        ++numberOfTimeouts;
+        if(numberOfTimeouts==1){
+	  ROS_INFO("Timeout: repeating question");
+	  timeStartedWaiting=t; //refresh variables
+	
+	  if(ROBOT_VERBOSITY==TALKATIVE){
+	    ros::Rate loop_rate(10);
+            ros::spinOnce();
+            loop_rate.sleep();
+            sleepok(1, n);
+            if(n.ok()){
+              sc.say("Do you want to call emergency medical services, yes or no?");
+              ros::spinOnce();
+              loop_rate.sleep(); 
+              sleepok(3, n); 
+            }
+            spokenConversation.clear();
+          } 
+        }
+        else{ //maybe we should not call medical services on timeout if person is still talking
+	  ROS_INFO("Human is not responding");	
+	  robotReaction=CALL_MEDICAL_SERVICES;
+        }    
+      } //if time went by
+    } //if no response yet
+  
+  
+    //do we have a decision on what the robot should do?
+    if(robotReaction==GO_BACK_TO_WORK){
+
+      //return to initial pose
+      ROS_INFO("returning to initial point");
+      if(ROBOT_VERBOSITY==TALKATIVE){
+        ros::Rate loop_rate(10);
+	ros::spinOnce();
+	loop_rate.sleep();
+	sleepok(1, n);
+	if(n.ok()){
+	  sc.say("Glad to hear you are okay");
+	  ros::spinOnce();
+	  loop_rate.sleep(); 
+	  sleepok(3, n); 
+	  sc.say("I will go back to work");
+	  ros::spinOnce();
+	  loop_rate.sleep(); 
+	  sleepok(3, n);
+	}
+      }        
+       
+      ros::Rate loop_rate(10);
+      
+      if(ROBOT_CONTROL_STATE==VACUUMING){ //cant hurt?
+        ROBOT_CONTROL_STATE=MANUAL; 
+        stopVacuuming(); 
+        ROS_INFO("Stopped Vacuuming");
+        ros::spinOnce(); 
+        loop_rate.sleep(); 
+      }
+       
+      //point initial
+      aPose.pose.position.x =-0.98;
+      aPose.pose.position.y =-0.69;
+      aPose.pose.orientation.z =0.20106777973;
+      aPose.pose.orientation.w= 0.979577331278;
+  
+      for(int i=0; i< 10; ++i){
+        goal_publisher.publish(aPose);
+        ros::spinOnce(); 
+        loop_rate.sleep();   
+      }
+      loop_rate.sleep();  
+      loop_rate.sleep();  
+      
+      ROBOT_CONTROL_STATE = MANUAL;
+   
+    }
+    else if(robotReaction==CALL_MEDICAL_SERVICES){
+      ROS_INFO("calling emergency medical services and staying with victim");
+      if(ROBOT_VERBOSITY==TALKATIVE){
+	ros::Rate loop_rate(10);
+	ros::spinOnce();
+	loop_rate.sleep();
+	sleepok(1, n);
+	if(n.ok()){
+	  sc.say("Emergency medical services have been notified");
+	  ros::spinOnce();
+	  loop_rate.sleep(); 
+	  sleepok(4, n); 
+	  sc.say("Thank you for your patience");
+	  ros::spinOnce();
+	  loop_rate.sleep(); 
+	  sleepok(3, n);
+	}	
+      } 	
+      ROBOT_CONTROL_STATE = WAITING_FOR_EMS;    
+    } //end if robot should do something
+  }//end if robot waiting  
+}
+
+
+int getAngleFromHorribleQuaternion(double zParam, double &theta){
+
+  theta = (asin (zParam) * (180.0 / PI))*2.0;
+  //printf ("The arc sine of %f is %f degrees\n", param, result); //uncomment to see robots calculated angle
+  return 0;
+}
+
+
+void rosStuff::reactToEmergency(std::string& locationOfEmergency){
+      
+  ros::Rate loop_rate(10);
+
+  if(ROBOT_VERBOSITY==TALKATIVE){
+    ros::spinOnce();
+    if(n.ok()){
+      sc.playWave("/home/turtlebot/Sounds/emergency029.wav");
+      ros::spinOnce();
+      loop_rate.sleep(); 
+    }
+  }
+    
+  led_msg_ptr->value = kobuki_msgs::Led::RED;
+  blink_pub.publish(led_msg_ptr);
+  blink_pub2.publish(led_msg_ptr);  
+
+      
+  if(locationOfEmergency=="EM_KITCHEN"){
+    cout<< "emergency in the kitchen\n";
+     
+    //point kitchen
+    aPose.pose.position.x =0.2;
+    aPose.pose.position.y =-0.1;
+    aPose.pose.orientation.z =0.211699680923;
+    aPose.pose.orientation.w= 0.977334766135;
+  }
+  else if(locationOfEmergency=="EM_BATHROOM"){
+    cout<< "emergency in the bathroom\n";
+    //point toilet
+    aPose.pose.position.x = -1.0;
+    aPose.pose.position.y = -0.63;
+    aPose.pose.orientation.z = -0.60219520383;
+    aPose.pose.orientation.w = 0.798348881432; 
+  }
+  else if(locationOfEmergency=="EM_BEDROOM"){
+    cout<< "emergency in the bedroom\n";
+    //point bedroom
+    aPose.pose.position.x = -0.055;
+    aPose.pose.position.y =0.19;
+    aPose.pose.orientation.z =0.798348567914;
+    aPose.pose.orientation.w= 0.602195619471;
+  }
+  else { //if(no.payload=="EM_HALLWAY") //need an else??
+    cout<< "emergency in the hallway\n";	  
+       
+    //point hallway
+    aPose.pose.position.x = -0.06;
+    aPose.pose.position.y = -0.57;
+    aPose.pose.orientation.z = -0.584710624394;
+    aPose.pose.orientation.w = 0.811241940312;     
+  }
+    
+  for(int i=0; i< 10; ++i){
+    goal_publisher.publish(aPose);
+    ros::spinOnce(); 
+    loop_rate.sleep();   
+  }
+  loop_rate.sleep();  
+  loop_rate.sleep();  
+      
+  timeReachedDestination=time(0);
+  time_t robotResponseTime=timeReachedDestination- timeReceivedNotication;
+  ROS_INFO("timeReceivedNotication: %ld", timeReceivedNotication);
+  ROS_INFO("timeReachedDestination: %ld", timeReachedDestination);
+  ROS_INFO("robotResponseTime: %ld", robotResponseTime);
+  ROS_INFO("****************************");
+    
+  if(ROBOT_VERBOSITY==TALKATIVE){
+    ros::spinOnce();
+    loop_rate.sleep();
+    sleepok(1, n);
+    if(n.ok()){
+      sc.say("Potential Emergency Detected");
+      ros::spinOnce();
+      loop_rate.sleep(); 
+      sleepok(3, n); 
+    }
+  } 
+        
+  if(ROBOT_VERBOSITY==TALKATIVE){
+    ros::spinOnce();
+    loop_rate.sleep();
+    sleepok(1, n);
+    if(n.ok()){
+      sc.say("Do you want to call emergency medical services, yes or no?");
+      ros::spinOnce();
+      loop_rate.sleep(); 
+      sleepok(2, n); 
+    }
+  }     
+	      
+  led_msg_ptr->value = kobuki_msgs::Led::BLACK;
+  blink_pub.publish(led_msg_ptr);
+  blink_pub2.publish(led_msg_ptr);  
+
+  //wait for a few seconds, then return to initial pose 
+  numberOfTimeouts=0;
+  robotReaction=NOT_YET_DECIDED;
+  spokenConversation.clear();
+  timeStartedWaiting = time(0); //used?
+  timeStartedWaiting2 = time(0); //used?
+  ROBOT_CONTROL_STATE = WAITING;
+         
+}
+
+
+void restoreRobot(){
+  
+  numberOfTimeouts=0;
+  robotReaction=NOT_YET_DECIDED;
+  spokenConversation.clear();
+  timeStartedWaiting = time(0); 
+  timeStartedWaiting2 = time(0); 
+  ROBOT_CONTROL_STATE = MANUAL;
+}
+
+
+void rosStuff::checkForNotifications(){
+  
+  database_interface::Notification no;
+  if(!database.checkNotify(no)){
+    ROS_WARN_THROTTLE(10, "The check for notifications failed. This shouldn't happen.");      
+  }
+  else if (!no.channel.empty()){
+    ROS_INFO("Notification attributes: PID: %i, Channel %s, Payload: %s", no.sending_pid, no.channel.c_str(), no.payload.c_str());
+    if(no.channel == "robot_moved"){
+      //cout << "robotHasMoved\n"; //do something here
+    }
+    else if(no.channel == "robot"){
+      ROS_INFO("Received emergency notification");
+      timeReceivedNotication=time(0);
+      reactToEmergency(no.payload);  
+    }
+    else {
+      ROS_WARN("Received an notification on an unknown channel.");
+    }
+  } //end if not empty
+}
+
+
+void databaseInit(){ 
+  
+  database.listenToChannel("robot"); 
+  DATABASE_CONNECTED=1; 
+}
+
+
+void rosStuff::databaseCheck(){
+  
+  time_t t = time(0); 
+  if(DATABASE_CONNECTED && (t > (lastDatabaseCheck  + 2))){ //check database    
+    if(!database.isConnected()){
+      std::cerr << "Database failed to connect \n";
+      return;
+    }
+    std::cerr << "Database connected successfully \n";
+
+    std::vector<boost::shared_ptr<Task> > tasks;
+    if(!database.getList(tasks)){
+      std::cerr << "Failed to get list of tasks\n";
+      return;
+    }
+    std::cerr << "Retrieved " << tasks.size() << " tasks(s) \n";
+
+    if(tasks.empty()){
+      std::cout << "good\n";	  
+    }
+    else{
+      std::cout << "emergency!!!!!!!!\n";
+      ros::Rate loop_rate(10);
+      ros::spinOnce();  
+    }
+  } 
+}
+
+
+void rosStuff::localizationCallback(const geometry_msgs::PoseWithCovarianceStamped currentPose){  //should this be &?
+
+  //insert current estimate of robot pos and orient into database table
+  time_t t = time(0); 
+  if(DATABASE_CONNECTED && (t > (lastDatabaseCheck  + 2))){ 
+    //check database
+    if(!database.isConnected()){
+      std::cerr << "Database failed to connect \n";
+      return;
+    }
+    std::cerr << "Database connected successfully \n";
+
+    //LETS INSERT A CALL
+    double theta;
+    getAngleFromHorribleQuaternion(currentPose.pose.pose.orientation.z, theta);
+	   
+	
+    Robot_Pose new_robot_pose;
+    //stub
+    ros::Time time_st = ros::Time::now();
+    int millisecs= (time_st.nsec/1e6);
+    int secs= (((int)time_st.sec) % 100000);	
+    int myTimeStamp= secs * 1000 + millisecs;
+    new_robot_pose.timestamp_.data()  =  time_st.toNSec()/1e3; //ros::Time::now();
+    new_robot_pose.x_.data() = currentPose.pose.pose.position.x;
+    new_robot_pose.y_.data() = currentPose.pose.pose.position.y;
+    new_robot_pose.theta_.data() = theta;
+	
+    cout << "ROBOT MOVED: " <<  ros::Time::now() << " "  <<  myTimeStamp << " " << currentPose.pose.pose.position.x << " " << currentPose.pose.pose.position.y << " " 
+      << theta << "\n";
+
+    if(!database.insertIntoDatabase(&new_robot_pose)) 
+      std::cerr << "Database insertion failed\n";
+    else 
+      std::cerr << "Database insertion succeeded\n";
+  }	
+}
+
+
+void rosStuff::bumperCallback(const kobuki_msgs::BumperEvent msg){ 
+  
+  //typically one event will call this function many times T_T maybe need mutex or such...
+  time_t t = time(0);   // get time now
+  if(t > (lastTimeBumperEventProcced + 3)){ //3 appears to mean 3 seconds... 
+    lastTimeBumperEventProcced=t;
+    ros::Rate loop_rate(10);    
+    if(!scheduledMovements.empty()){
+      //send command to stop moving, and should also clear scheduledMovements 
+      movementCommand=geometry_msgs::Twist(); //init       
+      motor_pub.publish(movementCommand); //ROBUST??? NEED TO SEND A FEW TIMES?
+      ros::spinOnce();
+      loop_rate.sleep();
+      
+      scheduledMovements.clear();
+
+      moveBackwardAWeeBit();
+      largeTurn();
+      moveForwardAWeeBit();        
+    } 
+    if(ROBOT_VERBOSITY==TALKATIVE){
+      if(ROBOT_CONTROL_STATE == VACUUMING ){
+	ROS_INFO("collision while vacuuming ");
+      }
+      else{
+	ros::spinOnce();
+	sleepok(1, n);
+	if(n.ok() && !(robot_bumper_messages.empty())){ //randomly select a message which is not the last one...     
+          int soundIndex;
+	  //first check that there is at least one message which hasn't been said recently
+	  int robotHasSaidAllMessages=1;
+	  for(unsigned int i=0; i< said_bumper_message_recently.size(); ++i){
+	    if(said_bumper_message_recently.at(i) == 0){
+	      robotHasSaidAllMessages=0;	    
+	    }
+	  }
+	  if(robotHasSaidAllMessages){ //refresh the list
+	    for(unsigned int i=0; i< said_bumper_message_recently.size(); ++i){
+	      said_bumper_message_recently.at(i) = 0;
+	    }  
+	    robotHasSaidAllMessages=0; //not needed if local var, but if we want global
+	  }	  
+          do{
+	    soundIndex= (rand() % robot_bumper_messages.size()); 
+	  }
+          while(said_bumper_message_recently.at(soundIndex)); //say something different from last time if possible
+
+	  sc.say(robot_bumper_messages.at(soundIndex).c_str());
+	  ros::spinOnce();
+	  sleepok(2, n); 	
+	  said_bumper_message_recently.at(soundIndex)=1;
+        }
+      }
+    }
+  }
+}
+
+
+void rosStuff::initLocalization(){
+  
+  //localization_sub = n.subscribe("amcl_pose", 1000, &rosStuff::localizationCallback, this); //uncomment this if you want to send robot info to database
+}
+  
+  
+void rosStuff::initBumper(){
+  
+  bumper_sub = n.subscribe("mobile_base/events/bumper", 1000, &rosStuff::bumperCallback, this);
+}
+  
+  
+//functions to determine if point is within a triangle  
+float sign(float p1_x, float p1_y, float p2_x, float p2_y, float p3_x, float p3_y){
+  
+  return (p1_x - p3_x) * (p2_y - p3_y) - (p2_x - p3_x) * (p1_y - p3_y);
+}
+bool pointInTriangle(float pt_x, float pt_y, float v1_x, float v1_y, float v2_x, float v2_y, float v3_x, float v3_y){
+  
+  bool b1, b2, b3;
+
+  b1 = sign(pt_x, pt_y, v1_x, v1_y, v2_x, v2_y) < 0.0f;
+  b2 = sign(pt_x, pt_y, v2_x, v2_y, v3_x, v3_y) < 0.0f;
+  b3 = sign(pt_x, pt_y, v3_x, v3_y, v1_x, v1_y) < 0.0f;
+
+  return ((b1 == b2) && (b2 == b3));
+}
+
+
+void drawStuff(){
+  
+  //draw arrows
+  Point up_points[1][3];
+  Point down_points[1][3];
+  Point right_points[1][3];
+  Point left_points[1][3];
+     
+  up_points[0][0] = Point( (base_width/2)+padding, padding);
+  up_points[0][1] = Point( (base_width/3)+padding, (base_width/3) + padding);
+  up_points[0][2] = Point( ((2*base_width)/3)+padding, (base_width/3) + padding); 
+  
+  down_points[0][0] = Point( (base_width/2)+padding, base_width+padding);
+  down_points[0][1] = Point( (base_width/3)+padding, ((2*base_width)/3)+padding);
+  down_points[0][2] = Point( ((2*base_width)/3)+padding, ((2*base_width)/3)+padding );  
+ 
+  right_points[0][0] = Point( ((2*base_width)/3)+padding, (base_width/3) + padding);
+  right_points[0][1] = Point( base_width+padding, (base_width/2)+padding);
+  right_points[0][2] = Point( ((2*base_width)/3)+padding, ((2*base_width)/3)+padding); 
+  
+  left_points[0][0] = Point( (base_width/3) + padding, (base_width/3) + padding);
+  left_points[0][1] = Point( padding, (base_width/2)+padding);
+  left_points[0][2] = Point( (base_width/3) + padding, ((2*base_width)/3)+padding);   
+  
+  const Point* ppt_up[1] = { up_points[0] };  
+  const Point* ppt_down[1] = { down_points[0] };   
+  const Point* ppt_right[1] = { right_points[0] };  
+  const Point* ppt_left[1] = { left_points[0] };  
+  
+  int npt[]= { 3 };
+  image = Mat::zeros(total_length, total_width, CV_8UC3 );
+    
+  fillPoly(image, ppt_up, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+  fillPoly(image, ppt_down, npt, 1, Scalar( bottom_rgb[0], bottom_rgb[1], bottom_rgb[2]), 8 );
+  fillPoly(image, ppt_right, npt, 1, Scalar( right_rgb[0], right_rgb[1], right_rgb[2]), 8 );  
+  fillPoly(image, ppt_left, npt, 1, Scalar( left_rgb[0], left_rgb[1], left_rgb[2]), 8 );  
+  
+  //draw buttons
+  rectangle(image, Point(startOfMoveButtons_x, startOfMoveButtons_y), Point(startOfMoveButtons_x+100, startOfMoveButtons_y+30), Scalar(255, 255, 255), -1, 8);   
+  rectangle(image, Point(startOfMoveButtons_x+150, startOfMoveButtons_y), Point(startOfMoveButtons_x+250, startOfMoveButtons_y+30), Scalar(255, 255, 255), -1, 8); 
+  rectangle(image, Point(startOfMoveButtons_x, startOfMoveButtons_y+50), Point(startOfMoveButtons_x+100, startOfMoveButtons_y+80), Scalar(255, 255, 255), -1, 8);   
+  rectangle(image, Point(startOfMoveButtons_x+150, startOfMoveButtons_y+50), Point(startOfMoveButtons_x+250, startOfMoveButtons_y+80), Scalar(255, 255, 255), -1, 8); 
+  rectangle(image, Point(startOfMoveButtons_x, startOfMoveButtons_y+100), Point(startOfMoveButtons_x+100, startOfMoveButtons_y+130), Scalar(255, 255, 255), -1, 8); 
+  
+  putText(image, "Bedroom", Point(startOfMoveButtons_x+10, startOfMoveButtons_y+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);  
+  putText(image, "Kitchen", Point(startOfMoveButtons_x+160, startOfMoveButtons_y+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);   
+  putText(image, "Hallway", Point(startOfMoveButtons_x+10, startOfMoveButtons_y+70), 1, 1.0, Scalar(0, 0, 0), 1, 8);  
+  putText(image, "Toilet", Point(startOfMoveButtons_x+160, startOfMoveButtons_y+70), 1, 1.0, Scalar(0, 0, 0), 1, 8);   
+  putText(image, "InitPose", Point(startOfMoveButtons_x+10, startOfMoveButtons_y+120), 1, 1.0, Scalar(0, 0, 0), 1, 8);    
+
+  rectangle(image, Point(startOfMoveButtons_x, startOfMoveButtons_y+200), Point(startOfMoveButtons_x+100, startOfMoveButtons_y+230), Scalar(255, 255, 255), -1, 8);
+  if(ROBOT_CONTROL_STATE!=VACUUMING){ //change button text depending on robot's state
+     putText(image, "Vacuum", Point(startOfMoveButtons_x+10, startOfMoveButtons_y+220), 1, 1.0, Scalar(0, 0, 0), 1, 8); 
+  }
+  else{
+     putText(image, "Stop Vac", Point(startOfMoveButtons_x+10, startOfMoveButtons_y+220), 1, 1.0, Scalar(0, 0, 0), 1, 8); 
+  } 
+  rectangle(image, Point(startOfMoveButtons_x, startOfMoveButtons_y+250), Point(startOfMoveButtons_x+100, startOfMoveButtons_y+280), Scalar(255, 255, 255), -1, 8);
+  if(ROBOT_VERBOSITY!=TALKATIVE){ //change button text depending on robot's state
+    putText(image, "Sound", Point(startOfMoveButtons_x+10, startOfMoveButtons_y+270), 1, 1.0, Scalar(0, 0, 0), 1, 8);   
+  }
+  else{
+    putText(image, "Quiet", Point(startOfMoveButtons_x+10, startOfMoveButtons_y+270), 1, 1.0, Scalar(0, 0, 0), 1, 8);   
+  } 
+  rectangle(image, Point(restore_pos_x, restore_pos_y), Point(restore_pos_x+100, restore_pos_y+30), Scalar(255, 255, 255), -1, 8); 
+  putText(image, "Restore", Point(restore_pos_x+10, restore_pos_y+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);  
+  rectangle(image, Point(timerbutton_x, timerbutton_y), Point(timerbutton_x+100, timerbutton_y+30), Scalar(255, 255, 255), -1, 8); 
+  putText(image, "Get Time", Point(timerbutton_x+10, timerbutton_y+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);  
+   
+  imshow(aWin, image);
+}
+
+
+void mouseCallBackFunc(int event, int x, int y, int flags, void* userdata){  //mouse callback
+  
+  rosStuff* r=(rosStuff*)userdata;
+  time_t t = time(0);  
+  
+  if(event == EVENT_LBUTTONDOWN){
+    cout << x << ", " << y << endl;
+    if((pointInTriangle(x, y, (base_width/2)+padding, padding, (base_width/3)+padding, (base_width/3) + padding, ((2*base_width)/3)+padding, (base_width/3) + padding))
+      && ROBOT_CONTROL_STATE==MANUAL 
+    ){ //up
+    
+      lastMotionEventProcced=t;
+      
+      up_rgb[0] = 255; up_rgb[1] = 0; up_rgb[2] = 0;   
+      bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];  
+      right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+      left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+           
+      drawStuff();
+      ros::Rate loop_rate(10);
+      
+      if(ROBOT_VERBOSITY==TALKATIVE){
+        ros::spinOnce();
+        if(r->n.ok()){
+          r->sc.say("Forwards");
+          ros::spinOnce();
+          loop_rate.sleep(); 
+        }
+      } 
+      
+      r->movementCommand=geometry_msgs::Twist(); //init
+      r->movementCommand.linear.x = 0.1;
+
+      for(int i=0; i< 10; ++i){
+        r->motor_pub.publish(r->movementCommand);
+        ros::spinOnce(); 
+        loop_rate.sleep();   
+      }
+      loop_rate.sleep();  
+      loop_rate.sleep();  
+       
+      r->movementCommand.linear.x = 0.0;
+      r->motor_pub.publish(r->movementCommand);
+      ros::spinOnce();
+      loop_rate.sleep(); 
+       
+    }
+    else if((pointInTriangle(x, y, (base_width/3) + padding, (base_width/3) + padding, padding, (base_width/2)+padding, (base_width/3) + padding, ((2*base_width)/3)+padding))
+       && ROBOT_CONTROL_STATE==MANUAL){ //left
+       
+      up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+      bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];  
+      right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+      left_rgb[0] = 255; left_rgb[1] = 0; left_rgb[2] = 0;
+	  
+      ros::Rate loop_rate(10);
+    
+    	 if(ROBOT_VERBOSITY==TALKATIVE){
+	    ros::spinOnce();
+	    if(r->n.ok()){
+	      r->sc.say("Left");
+	      ros::spinOnce();
+	      loop_rate.sleep(); 
+	    }
+	 }
+    
+      r->movementCommand=geometry_msgs::Twist(); //init       
+      r->movementCommand.angular.z = 0.5;   
+
+      for(int i=0; i< 10; ++i){
+	r->motor_pub.publish(r->movementCommand);
+        ros::spinOnce(); 
+        loop_rate.sleep();   
+      }
+      loop_rate.sleep();  
+      loop_rate.sleep();  
+       
+      r->movementCommand.angular.z = 0.0;
+      r->motor_pub.publish(r->movementCommand);
+      ros::spinOnce();
+      loop_rate.sleep();	  
+  
+    }
+    else if((pointInTriangle(x, y, (base_width/2)+padding, base_width+padding, (base_width/3)+padding, ((2*base_width)/3)+padding, ((2*base_width)/3)+padding, 
+      ((2*base_width)/3)+padding))
+      && ROBOT_CONTROL_STATE==MANUAL){ //bottom
+      
+      up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+      bottom_rgb[0]  = 255; bottom_rgb[1] = 0; bottom_rgb[2] = 0;   
+      right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+      left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+	  
+      ros::Rate loop_rate(10);
+
+    	 if(ROBOT_VERBOSITY==TALKATIVE){
+	    ros::spinOnce();
+	    if(r->n.ok()){
+	      r->sc.say("Back");
+	      ros::spinOnce();
+	      loop_rate.sleep(); 
+	    }
+	 }
+	 
+      r->movementCommand=geometry_msgs::Twist(); //init
+      r->movementCommand.linear.x = -0.1;
+
+      for(int i=0; i< 10; ++i){
+        r->motor_pub.publish(r->movementCommand);
+        ros::spinOnce(); 
+        loop_rate.sleep();   
+      }
+      loop_rate.sleep();  
+      loop_rate.sleep();  
+       
+      r->movementCommand.linear.x = 0.0;
+      r->motor_pub.publish(r->movementCommand);
+      ros::spinOnce();
+      loop_rate.sleep();	  
+       
+    } 
+    else if((pointInTriangle(x, y, ((2*base_width)/3)+padding, (base_width/3) + padding, base_width+padding, (base_width/2)+padding, ((2*base_width)/3)+padding, 
+      ((2*base_width)/3)+padding))
+      && ROBOT_CONTROL_STATE==MANUAL){ //right
+      
+      up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+      bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];    
+      right_rgb[0] = 255; right_rgb[1] = 0; right_rgb[2] = 0;  
+      left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+	      
+      ros::Rate loop_rate(10);
+    
+    	 if(ROBOT_VERBOSITY==TALKATIVE){
+	    ros::spinOnce();
+	    if(r->n.ok()){
+	      r->sc.say("Right");
+	      ros::spinOnce();
+	      loop_rate.sleep(); 
+	    }
+	 }    
+    
+      r->movementCommand=geometry_msgs::Twist(); //init
+      r->movementCommand.angular.z = -0.5;   
+      for(int i=0; i< 10; ++i){
+	r->motor_pub.publish(r->movementCommand);
+        ros::spinOnce(); 
+        loop_rate.sleep();   
+      }
+      loop_rate.sleep();  
+      loop_rate.sleep();  
+       
+      r->movementCommand.angular.z = 0.0;
+      r->motor_pub.publish(r->movementCommand);
+      ros::spinOnce();
+      loop_rate.sleep();	 	      
+	      
+    } 	 
+    else if(x > startOfMoveButtons_x && x < startOfMoveButtons_x+100 && y>startOfMoveButtons_y && y<startOfMoveButtons_y+30){ //bedroom
+
+      if(ROBOT_CONTROL_STATE==VACUUMING){
+        ROBOT_CONTROL_STATE=MANUAL; 
+        r->stopVacuuming(); 
+        ROS_INFO("Stopped Vacuuming");
+        ros::spinOnce(); 
+	ros::Rate loop_rate(10);
+        loop_rate.sleep(); 
+      }
+  
+      timeReceivedNotication=time(0);
+
+      std::string msg="EM_BEDROOM";
+      r->reactToEmergency(msg);
+  
+  
+    }
+    else if(x > startOfMoveButtons_x+150 && x < startOfMoveButtons_x+250 && y>startOfMoveButtons_y && y<startOfMoveButtons_y+30){ //kitchen
+
+      if(ROBOT_CONTROL_STATE==VACUUMING){
+        ROBOT_CONTROL_STATE=MANUAL; 
+        r->stopVacuuming(); 
+        ROS_INFO("Stopped Vacuuming");
+        ros::spinOnce(); 
+	ros::Rate loop_rate(10);
+        loop_rate.sleep(); 
+      }
+
+      timeReceivedNotication=time(0);
+
+      std::string msg="EM_KITCHEN";
+      r->reactToEmergency(msg);
+      
+    }
+    else if(x > startOfMoveButtons_x && x < startOfMoveButtons_x+100 && y>startOfMoveButtons_y+50 && y<startOfMoveButtons_y+80){ //hallway
+
+      if(ROBOT_CONTROL_STATE==VACUUMING){
+        ROBOT_CONTROL_STATE=MANUAL; 
+        r->stopVacuuming(); 
+        ROS_INFO("Stopped Vacuuming");
+        ros::spinOnce(); 
+	ros::Rate loop_rate(10);
+        loop_rate.sleep(); 
+      }
+      
+      timeReceivedNotication=time(0);
+
+      std::string msg="EM_HALLWAY";
+      r->reactToEmergency(msg);
+    }
+    else if(x > startOfMoveButtons_x+150 && x < startOfMoveButtons_x+250 && y>startOfMoveButtons_y+50 && y<startOfMoveButtons_y+80){ //bathroom
+
+      if(ROBOT_CONTROL_STATE==VACUUMING){
+        ROBOT_CONTROL_STATE=MANUAL; 
+        r->stopVacuuming(); 
+        ROS_INFO("Stopped Vacuuming");
+        ros::spinOnce(); 
+	ros::Rate loop_rate(10);
+        loop_rate.sleep(); 
+      }
+      
+      timeReceivedNotication=time(0);
+	
+      std::string msg="EM_BATHROOM";
+      r->reactToEmergency(msg);   
+      
+    }
+    else if(x > startOfMoveButtons_x && x < startOfMoveButtons_x+100 && y>startOfMoveButtons_y+100 && y<startOfMoveButtons_y+130){ //init
+
+      ROS_INFO("pressed init");
+            ros::Rate loop_rate(10);
+      
+      if(ROBOT_CONTROL_STATE==VACUUMING){
+        ROBOT_CONTROL_STATE=MANUAL; 
+        r->stopVacuuming(); 
+        ROS_INFO("Stopped Vacuuming");
+        ros::spinOnce(); 
+        loop_rate.sleep(); 
+      }
+ 
+      //point initial
+      r->aPose.pose.position.x =-0.98;
+      r->aPose.pose.position.y =-0.69;
+      r->aPose.pose.orientation.z =0.20106777973;
+      r->aPose.pose.orientation.w= 0.979577331278;
+  
+      for(int i=0; i< 10; ++i){
+        r->goal_publisher.publish(r->aPose);
+        ros::spinOnce(); 
+        loop_rate.sleep();   
+      }
+      loop_rate.sleep();  
+      loop_rate.sleep();  
+    }    
+     else if(x > startOfMoveButtons_x && x < startOfMoveButtons_x+100 && y>startOfMoveButtons_y+200 && y<startOfMoveButtons_y+230){ //vacuum button
+      
+      if(ROBOT_CONTROL_STATE!=VACUUMING){
+        ROBOT_CONTROL_STATE=VACUUMING;
+	
+        ROS_INFO("Starting to Vacuum");
+      }  
+      else{
+        ROBOT_CONTROL_STATE=MANUAL; //default
+        r->stopVacuuming(); 
+        ROS_INFO("Stopped Vacuuming");
+      }
+    }   
+     else if(x > startOfMoveButtons_x && x < startOfMoveButtons_x+100 && y>startOfMoveButtons_y+250 && y<startOfMoveButtons_y+280){ //quiet button
+     
+        if(ROBOT_VERBOSITY!=TALKATIVE){
+          ROBOT_VERBOSITY=TALKATIVE; //default
+          ROS_INFO("Robot Verbose");
+        }  
+        else{
+	  ROBOT_VERBOSITY=LACONIC; 
+	  ROS_INFO("Robot Laconic");
+        }   
+  
+     }
+     else if(x > restore_pos_x && x < restore_pos_x+100 && y>restore_pos_y && y<restore_pos_y+30){ //check if restore "button" was pressed
+       restoreRobot();
+       ROS_INFO("Restored robot");
+     }  
+     else if(x > timerbutton_x && x < timerbutton_x+100 && y>timerbutton_y && y<timerbutton_y+30){ //check if get time "button" was pressed
+       userSpecifiedTime=time(0);
+       ROS_INFO("userSpecifiedTime: %ld", userSpecifiedTime);
+     }  
+  }
+  
+  drawStuff();
+    
+}
+
+
+void sleepok(int t, ros::NodeHandle &nh){
+  
+  if(nh.ok())
+    sleep(t);
+}
+ 
+ 
+int playWav(int soundIndex){ 
+ 
+  currentSound.SetBuffer(sounds[soundIndex]); 
+  std::cout << "playing sound "<< soundIndex  << std::endl;
+  currentSound.Play();
+  return EXIT_SUCCESS;
+}
+
+  
+void rosStuff::moveForwardAWeeBit(){
+  
+  //cout <<"fwd\n";
+  currentMovementCommand=geometry_msgs::Twist(); //init
+  currentMovementCommand.linear.x = 0.1;
+  for(int i=0; i< 10; ++i){
+    scheduledMovements.push_back(currentMovementCommand);
+  }
+}
+
+
+void rosStuff::moveBackwardAWeeBit(){
+  
+  //cout <<"bwd\n";
+  currentMovementCommand=geometry_msgs::Twist(); //init
+  currentMovementCommand.linear.x = -0.1;
+  for(int i=0; i< 10; ++i){
+    scheduledMovements.push_back(currentMovementCommand);
+  }
+}
+
+
+void rosStuff::turnRandomly(double magnitudeOfTurn){
+  
+  double randomAngle = (((double)rand()/(double)(RAND_MAX)) - 0.5) * magnitudeOfTurn; //center around 0
+  //cout <<"rot " << randomAngle << "\n";
+  currentMovementCommand=geometry_msgs::Twist(); //init
+  currentMovementCommand.angular.z = randomAngle; 
+  for(int i=0; i< 10; ++i){
+    scheduledMovements.push_back(currentMovementCommand);
+  }   
+}
+
+
+void rosStuff::largeTurn(){
+  
+  double signFactor = ((rand() % 2)==0)? 1.0: -1.0 ;
+  double randomAngle = (((double)rand()/(double)(RAND_MAX))+0.5) * signFactor; //center around 0
+  //cout <<"LARGE rot " << randomAngle << "\n";
+  currentMovementCommand=geometry_msgs::Twist(); //init
+  currentMovementCommand.angular.z = randomAngle; 
+  for(int i=0; i< 20; ++i){
+    scheduledMovements.push_back(currentMovementCommand);
+  }   
+}
+
+
+void rosStuff::stopVacuuming(){
+
+  currentSound.Stop(); //cancel sound!!!
+  playWav(1); 
+	      
+  //try stopping wave....
+  ros::Rate loop_rate(10);
+  ros::spinOnce();
+  if(n.ok()){
+    sc.stopAll();
+    ros::spinOnce();
+    loop_rate.sleep(); 
+  }	
+	
+  //try playing wave....
+  ros::spinOnce();
+  if(n.ok()){
+    sc.playWave("/home/turtlebot/Sounds/v_end.wav");
+    ros::spinOnce();
+    loop_rate.sleep(); 
+  }
+			
+  //send command to stop moving, and should also clear scheduledMovements 
+  movementCommand=geometry_msgs::Twist(); //init       
+  motor_pub.publish(movementCommand); //ROBUST??? NEED TO SEND A FEW TIMES?
+  ros::spinOnce();
+  loop_rate.sleep();
+        
+  scheduledMovements.clear();
+	
+}
+
+

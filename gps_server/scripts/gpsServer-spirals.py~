@@ -1,0 +1,54 @@
+#!/usr/bin/env python
+#
+#Copyright (c) 2017, Martin Cooney
+#All rights reserved.
+#THIS SOFTWARE IS PROVIDED "AS IS".
+#IN NO EVENT WILL THE COPYRIGHT OWNER BE LIABLE FOR ANY DAMAGES
+#ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE.
+
+
+import rospy
+from std_msgs.msg import String
+from subprocess import call
+import sys
+from sensor_msgs.msg import Image
+import cv2
+import cv_bridge
+import distortion_correction as dcorr
+
+def talker():
+
+	rospy.init_node('gpsServer', anonymous=True)
+	image_pub= rospy.Publisher("gps_channel", Image, queue_size=1)
+        spiralPositionPub = rospy.Publisher('pos_channel', String, queue_size=1)
+	rate=rospy.Rate(50)
+
+
+
+	myBridge= cv_bridge.CvBridge()
+	cameraGetImageCommand = "wget --user root --password r3dM1lk -q -O /home/turtlebot/current.jpg http://192.168.1.2/axis-cgi/jpg/image.cgi"
+	while not rospy.is_shutdown():
+		rospy.loginfo('[Connected: '+ str(image_pub.get_num_connections()) +'] published image') #for debugging
+
+
+		call(cameraGetImageCommand, shell=True)
+
+		#call josef code
+		print "start josef code"
+	call("export LD_LIBRARY_PATH=/usr/local/MATLAB/R2018a/runtime/glnxa64:/usr/local/MATLAB/R2018a/bin/glnxa64:/usr/local/MATLAB/R2018a/sys/os/glnxa64", shell=True)
+
+		call("/home/turtlebot/catkin_ws/src/gps_server/scripts/josef_scripts_image_processing2.3/scripts_image_processing2.3/main_detect_spirals_server_3_4", shell=True)
+
+	call("export LD_LIBRARY_PATH=/home/turtlebot/catkin_ws/devel/lib:/opt/ros/indigo/lib", shell=True)
+
+		#read in output of josef's code, send it to all robots
+		print "done with josef code"
+		spiralPositionPub.publish("hey")
+		rate.sleep()
+
+if __name__== '__main__':
+	try:
+		talker()
+	except rospy.ROSInterruptException:
+		pass
+

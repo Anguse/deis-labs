@@ -1,0 +1,1101 @@
+
+/*
+
+int main(int argc, char **argv)
+{
+  
+  
+  //try adding ros stuff
+  ros::init(argc, argv, "students");
+  ROS_INFO("hello ros and db");
+  //ros::spinOnce();
+  
+  ros::NodeHandle n;
+  ros::Publisher motor_pub;
+  motor_pub = n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 10);
+  ros::Rate loop_rate(10);
+  
+
+  
+  
+  database_interface::PostgresqlDatabase 
+    database("192.168.10.5", "5432",
+	     "user2", "password", "martins_db");
+  if (!database.isConnected())
+  {
+    std::cerr << "Database failed to connect \n";
+    return -1;
+  }
+  std::cerr << "Database connected successfully \n";
+
+  
+  //mine
+    std::vector< boost::shared_ptr<Places> > places;
+  if (!database.getList(places))
+  {
+    std::cerr << "Failed to get list of places\n";
+    return -1;
+  }
+  std::cerr << "Retrieved " << places.size() << " places(s) \n";
+  
+  std::cerr << "places: \n";
+  for (size_t i=0; i<places.size(); i++)
+  {
+    std::cerr << places[i]->key_column_.data() 
+	      << ", " 
+	      << places[i]->task_id_.data()
+	      << ", " 
+	      << places[i]->task_name_.data()
+	      << ", " 
+	      << places[i]->priority_.data()	      
+	      << "\n";
+  }
+    
+
+  //loop
+  while(ros::ok()){ //ESC
+    ros::spinOnce();
+    loop_rate.sleep();
+  }
+  
+  
+  
+  return 0;
+}
+
+*/
+
+
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include <sstream>
+#include <kobuki_msgs/Sound.h>
+#include <geometry_msgs/Twist.h>
+#include <turtlebot_msgs/SetFollowState.h>
+//#include <turtlebot_node/TurtlebotSensorState.h> //appears to be for Create
+#include <kobuki_msgs/BumperEvent.h>
+#include <kobuki_msgs/Led.h>
+#include <sound_play/sound_play.h>
+#include <unistd.h>
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>  
+
+#include <iostream>
+#include <ctime>
+
+
+
+
+#include <string>
+#include <vector>
+
+#include <database_interface/db_class.h>
+#include <boost/shared_ptr.hpp>
+#include <database_interface/postgresql_database.h>
+//#include "ros/ros.h"
+//#include <geometry_msgs/Twist.h>
+
+
+
+using namespace std;
+using namespace cv;
+
+
+
+
+class Places : public database_interface::DBClass
+{
+public:
+  database_interface::DBField<int> key_column_;
+  database_interface::DBField<int> task_id_;
+  database_interface::DBField<std::string> task_name_;
+  database_interface::DBField<int> priority_;
+
+  Places() :
+    key_column_(database_interface::DBFieldBase::TEXT, 
+		this, "key_column", "martin_places2", true),
+    task_id_(database_interface::DBFieldBase::TEXT, 
+		this, "task_id", "martin_places2", true),
+    task_name_(database_interface::DBFieldBase::TEXT, 
+		   this, "task_name", "martin_places2", true),
+    priority_(database_interface::DBFieldBase::TEXT, 
+		 this, "priority", "martin_places2", true)  
+  {
+    primary_key_field_ = &key_column_;
+    fields_.push_back(&task_id_);
+    fields_.push_back(&task_name_);
+    fields_.push_back(&priority_);
+
+    setAllFieldsReadFromDatabase(true);
+    setAllFieldsWriteToDatabase(true);
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+#define padding 15
+#define w 300 //(300+(2*padding))
+#define button_pannel_w w
+#define button_pannel_l 50
+#define total_width (w+ (2*padding) + 700)
+#define total_length (w+ button_pannel_l + (2*padding) +200)
+
+
+#define FOLLOWING 1
+#define MANUAL 2
+#define NAVIGATING_USING_MAP 3
+
+#define TALKATIVE 1
+#define LACONIC 2
+
+int ROBOT_VERBOSITY=TALKATIVE;
+
+int followButton_x1=padding;  
+int followButton_y1=w + (2*padding); 
+int followButton_x2=w + padding; 
+int followButton_y2=w + padding + button_pannel_l; 
+
+int databaseButton_x1=padding;  
+int databaseButton_y1=followButton_y2 + padding; 
+int databaseButton_x2=w + padding; 
+int databaseButton_y2=databaseButton_y1 + button_pannel_l - padding; 
+
+int databaseConnected = 0;
+
+int up_rgb[] = {255, 255, 255};
+int bottom_rgb[] = {255, 255, 255};
+int right_rgb[] = {255, 255, 255};
+int left_rgb[] = {255, 255, 255};
+int default_rgb[] = {255, 255, 255};
+int off_rgb[] = {127, 127, 127};
+
+
+char aWin[] = "Tele-operated Robot for Patient Checkups";
+Mat image;
+  
+
+
+
+
+void drawStuff();
+float sign(float p1_x, float p1_y, float p2_x, float p2_y, float p3_x, float p3_y);
+bool pointInTriangle(float pt_x, float pt_y, float v1_x, float v1_y, float v2_x, float v2_y, float v3_x, float v3_y);
+void CallBackFunc(int event, int x, int y, int flags, void* userdata);
+void sleepok(int t, ros::NodeHandle &nh);
+//void bumperCallback(const kobuki_msgs::BumperEventConstPtr msg);
+//void bumperCallback(const std_msgs::String::ConstPtr& msg);
+//void bumperCallback(const kobuki_msgs::BumperEventConstPtr msg);
+//void bumperCallback(const kobuki_msgs::BumperEvent msg);
+//char **dummyvar = (char *[]){"opencv_try"};
+//char *dummyvar[] = {"opencv_try"};
+void bumperCallback(const kobuki_msgs::BumperEvent msg); //, void* userdata
+//ros::init(1, dummyvar, "opencv_try");
+
+kobuki_msgs::Sound msg;
+int robotState=MANUAL;
+Mat mapImage;
+Mat mapImage_smaller;
+  
+std::vector<std::string> robot_bumper_messages;
+std::vector<int> said_bumper_message_recently;
+time_t lastTimeBumperEventProcced;
+int lastBumperMessage=-1;
+  
+/*
+ros::NodeHandle n;
+ros::Publisher chatter_pub;
+ros::Rate loop_rate(10);
+  kobuki_msgs::Sound msg;
+chatter_pub = n.advertise<kobuki_msgs::Sound>("/mobile_base/commands/sound", 1000);
+*/
+
+
+class rosStuff{
+public:
+  ros::NodeHandle n;
+  ros::Publisher motor_pub;
+  ros::Publisher sound_pub; 
+ 
+  sound_play::SoundClient sc;
+  ros::ServiceClient followServiceClient;
+  turtlebot_msgs::SetFollowState followCommand;
+  geometry_msgs::Twist movementCommand;
+  //ros::Rate loop_rate;
+  ros::Subscriber bumper_sub;
+  kobuki_msgs::LedPtr led_msg_ptr;
+    
+  ros::Publisher blink_pub;
+  
+  void bumperCallback(const kobuki_msgs::BumperEvent msg); //rosStuff::
+  void initBumper(); 
+  
+  
+  
+};// rosStuff
+  
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "students");
+  ROS_INFO("hello world db, ros, and opencv");
+  
+  //init stuff
+  robot_bumper_messages.push_back("such pain");  said_bumper_message_recently.push_back(0);
+  robot_bumper_messages.push_back("ouch my gears"); said_bumper_message_recently.push_back(0);
+  robot_bumper_messages.push_back("do you mind?");  said_bumper_message_recently.push_back(0);
+  robot_bumper_messages.push_back("why wasn't I born a Roomba?"); said_bumper_message_recently.push_back(0);  
+  robot_bumper_messages.push_back("if only I had a laser"); said_bumper_message_recently.push_back(0);
+
+  time_t t = time(0);   // get time now
+  lastTimeBumperEventProcced=t-2000;
+  srand (time(NULL));
+  
+  //ros::spinOnce();
+  
+  //have to declare these before doing anything with time for some reason... ros is such a pain...
+  //ros::NodeHandle n;
+  //ros::Publisher chatter_pub= n.advertise<kobuki_msgs::Sound>("/mobile_base/commands/sound", 1000);
+  //ros::Rate loop_rate(10);
+  
+  rosStuff stuff;
+  stuff.motor_pub = stuff.n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 10); //1000
+  stuff.sound_pub = stuff.n.advertise<kobuki_msgs::Sound>("/mobile_base/commands/sound", 10);  
+  stuff.followServiceClient = stuff.n.serviceClient<turtlebot_msgs::SetFollowState>("/turtlebot_follower/change_state");
+
+  //ros::Subscriber bumper_sub = n.subscribe<turtlebot_node::turtlebotsensorstate>("/turtlebot_node/sensor_state", 10, bumperCallback); //1000
+  //ros::Subscriber bumper_sub = stuff.n.subscribe("events/bumper", 10, bumperCallback, NULL);//this  
+  stuff.initBumper();
+  //stuff.bumper_sub = stuff.n.subscribe("mobile_base/events/bumper", 1000, &rosStuff::bumperCallback, &stuff); //bumper //, (void*)&stuff
+  //stuff.blink_pub = stuff.n.advertise<kobuki_msgs::Led>("commands/led1", 10);
+  //pose_sub = n.subscribe("/pose2D", 1, &PointCloud::pose_callback, this);
+  
+  
+  stuff.movementCommand.linear.x = 0.0;
+  stuff.movementCommand.linear.y = 0.0;  
+  stuff.movementCommand.linear.z = 0.0;       
+  stuff.movementCommand.angular.x = 0.0;
+  stuff.movementCommand.angular.y = 0.0;  
+  stuff.movementCommand.angular.z = 0.0;   
+       
+       
+  //stuff.chatter_pub=stuff.n.advertise<kobuki_msgs::Sound>("/mobile_base/commands/sound", 1000);
+  ros::Rate loop_rate(10);
+  
+  namedWindow(aWin, 1);
+  setMouseCallback(aWin, CallBackFunc, &stuff); //NULL
+  moveWindow(aWin, 0, 200);
+
+  mapImage = imread("/home/user2/my_maps/j3.pgm", CV_LOAD_IMAGE_COLOR);   
+  if(!mapImage.data){
+     cout <<  "Could not open or find the map image" << std::endl;
+     return -1;
+  } 
+  resize(mapImage,mapImage_smaller,Size(mapImage.cols/2,mapImage.rows/2),0,0,INTER_LINEAR);   
+  
+  
+  
+  drawStuff();
+  //imshow( aWin, image);
+  //cout <<"called!/n";
+  msg.value = 6;
+  
+
+  loop_rate.sleep();
+  loop_rate.sleep();
+  loop_rate.sleep();
+	      
+  int count = 0;
+ 
+  ROS_INFO("%d", msg.value);
+  ros::spinOnce();
+  loop_rate.sleep();
+  
+  
+  //cout <<"called!/n";
+  
+ 
+ /*
+  while (count <1 && ros::ok()) //4
+  {
+ // if((ros::ok())){
+    //ROS_INFO("%s", msg.data.c_str());
+    
+    ROS_INFO("%d", msg.value);
+    chatter_pub.publish(msg);
+    ros::spinOnce();
+    loop_rate.sleep();
+    ++count;
+  }
+  */
+ //FIXED: CHANGED ENABLE IN NEW LAUNCH FILE
+ //START UGLY TEMPORARY FIX
+ //ros::NodeHandle n;
+ //stop robot from following right away
+ /*
+ros::ServiceClient client = n.serviceClient<turtlebot_msgs::SetFollowState>("/turtlebot_follower/change_state");
+turtlebot_msgs::SetFollowState srv;
+
+srv.request.state = 0; //STOP
+robotState=MANUAL;
+
+
+if (client.call(srv)){
+ROS_INFO("Result: %ld", (long int)srv.response.result);
+}
+else{
+ROS_ERROR("Failed to call service. very sucky");		    
+}
+ros::spinOnce();
+loop_rate.sleep();
+ */
+		  
+ 
+
+ //k... try to make some sort of loop that calls both opencv and ros T_T??
+  
+  
+  
+  //DB STUFF
+  
+  database_interface::PostgresqlDatabase 
+    database("192.168.10.5", "5432",
+	     "user2", "password", "martins_db");
+  if (!database.isConnected())
+  {
+    std::cerr << "Database failed to connect \n";
+    return -1;
+  }
+  std::cerr << "Database connected successfully \n";
+
+  
+  //mine
+    std::vector< boost::shared_ptr<Places> > places;
+  if (!database.getList(places))
+  {
+    std::cerr << "Failed to get list of places\n";
+    return -1;
+  }
+  std::cerr << "Retrieved " << places.size() << " places(s) \n";
+  
+  std::cerr << "places: \n";
+  for (size_t i=0; i<places.size(); i++)
+  {
+    std::cerr << places[i]->key_column_.data() 
+	      << ", " 
+	      << places[i]->task_id_.data()
+	      << ", " 
+	      << places[i]->task_name_.data()
+	      << ", " 
+	      << places[i]->priority_.data()	      
+	      << "\n";
+  }
+    
+
+  
+  
+  
+  
+  int keyPressed=0;
+  
+  while(keyPressed!=27 && ros::ok()){ //ESC
+    ros::spinOnce();
+    loop_rate.sleep();
+    keyPressed= waitKey(10); //needed?
+  }
+  
+  /*
+ros::Rate r(100);
+while (ros::ok())
+{
+  libusb_handle_events_timeout(...); // Handle USB events
+  ros::spinOnce();                   // Handle ROS events
+  r.sleep();
+}
+   * 
+   * */
+
+  return 0;
+}
+
+/*
+
+void bumperCallback(const kobuki_msgs::BumperEventConstPtr msg){
+   cout << "reacher bumper callback func" <<endl;
+  
+}
+  */
+
+
+
+/*
+void PointCloud::pose_callback(const geometry_msgs::Pose2DConstPtr& message)
+{
+    // process the message here
+}
+*/
+
+
+void rosStuff::bumperCallback(const kobuki_msgs::BumperEvent msg){ //const kobuki_msgs::BumperEventConstPtr msg //, void* userdata
+
+//typically one event will call this function many times T_T
+//prolly need mutex or such...
+
+//get current time
+//if 
+
+time_t t = time(0);   // get time now
+cout << t <<endl;
+
+/*
+    struct tm * now = localtime( & t );
+    cout << (now->tm_year + 1900) << '-' 
+         << (now->tm_mon + 1) << '-'
+         <<  now->tm_mday
+         << endl;
+*/
+
+if(t > (lastTimeBumperEventProcced + 3)){
+  
+  lastTimeBumperEventProcced=t;
+  
+    //say something like @ouch@
+  if(ROBOT_VERBOSITY==TALKATIVE){
+
+    ros::spinOnce();
+    //loop_rate.sleep(); 
+    sleepok(1, n);
+    if(n.ok() && !(robot_bumper_messages.empty())){
+        //randomly select a message which is not the last one...
+        int soundIndex;
+	
+	//check that there is at least one message which hasn't been said recently
+	int robotHasSaidAllMessages=1;
+	for(unsigned int i=0; i< said_bumper_message_recently.size(); ++i){
+	  if(said_bumper_message_recently.at(i) == 0){
+	    robotHasSaidAllMessages=0;	    
+	  }
+	}
+	if(robotHasSaidAllMessages){
+	  for(unsigned int i=0; i< said_bumper_message_recently.size(); ++i){
+	    said_bumper_message_recently.at(i) = 0;
+	  }  
+	  robotHasSaidAllMessages=0; //not needed if local var but want global?
+	}
+	  
+        do{
+	  soundIndex= (rand() % robot_bumper_messages.size());
+	  
+	}
+        while(said_bumper_message_recently.at(soundIndex)); //say something different from last time if possible
+
+	
+	sc.say(robot_bumper_messages.at(soundIndex).c_str());
+	ros::spinOnce();
+        //loop_rate.sleep(); 
+	sleepok(2, n); 
+	
+	said_bumper_message_recently.at(soundIndex)=1;
+	
+	//lastBumperMessage=soundIndex;	
+    }
+  }
+  
+}
+
+
+
+//rosStuff* r=(rosStuff*)userdata;
+  
+//cout <<"called!\n";
+ROS_INFO("hello");
+//ros::Publisher blink_pub; 
+//ros::NodeHandle n;
+
+/*
+
+led_msg_ptr->value = kobuki_msgs::Led::GREEN;
+//r->blink_pub.publish(led_msg_ptr);
+blink_pub.publish(led_msg_ptr);
+
+ros::Rate loop_rate(10);
+ros::spinOnce();
+loop_rate.sleep();
+  */
+
+}
+
+
+
+void rosStuff::initBumper(){
+
+led_msg_ptr.reset(new kobuki_msgs::Led());
+  blink_pub = n.advertise<kobuki_msgs::Led>("commands/led1", 10);
+  bumper_sub = n.subscribe("mobile_base/events/bumper", 1000, &rosStuff::bumperCallback, this);
+}
+  
+  
+  
+/**/
+
+/*
+void bumperCallback(const std_msgs::String::ConstPtr& msg)
+{
+  cout <<"called!/n";
+  
+  //print received data for debugging
+  ROS_INFO("I heard: [%s]", msg->data.c_str());
+  //If the callback data contains "hit" - change to integer, float or whatever type your message is
+//  if(msg->data.c_str() == "hit")
+ //     move_backwards();          // Call function to move the robot backwards
+}
+*/
+
+/*
+//define the bumperCallback function
+void bumperCallback(const turtlebot_node::TurtlebotSensorState::ConstPtr& msg)
+ {
+   cout << "reacher bumper callback func" <<endl;
+   uint8_t bumper = msg->bumps_wheeldrops;
+   ROS_INFO("bumper hit.value = [%d]", bumper);
+ }
+ void BumpBlinkController::bumperEventCB(const kobuki_msgs::BumperEventConstPtr msg)
+ 135 {
+ 136   if (this->getState()) // check, if the controller is active
+ 137   {
+ 138     // Preparing LED message
+ 139     kobuki_msgs::LedPtr led_msg_ptr;
+ 140     led_msg_ptr.reset(new kobuki_msgs::Led());
+ 141 
+ 142     if (msg->state == kobuki_msgs::BumperEvent::PRESSED)
+ 143     {
+ 144       ROS_INFO_STREAM("Bumper pressed. Turning LED on. [" << name_ << "]");
+ 145       led_msg_ptr->value = kobuki_msgs::Led::GREEN;
+ 146       blink_publisher_.publish(led_msg_ptr);
+ 147     }
+ 148     else // kobuki_msgs::BumperEvent::RELEASED
+ 149     {
+ 150       ROS_INFO_STREAM("Bumper released. Turning LED off. [" << name_ << "]");
+ 151       led_msg_ptr->value = kobuki_msgs::Led::BLACK;
+ 152       blink_publisher_.publish(led_msg_ptr);
+ 153     }
+ 154   }
+ 155 };
+*/
+
+
+float sign(float p1_x, float p1_y, float p2_x, float p2_y, float p3_x, float p3_y)
+{
+  return (p1_x - p3_x) * (p2_y - p3_y) - (p2_x - p3_x) * (p1_y - p3_y);
+}
+
+bool pointInTriangle(float pt_x, float pt_y, float v1_x, float v1_y, float v2_x, float v2_y, float v3_x, float v3_y)
+{
+  bool b1, b2, b3;
+
+  b1 = sign(pt_x, pt_y, v1_x, v1_y, v2_x, v2_y) < 0.0f;
+  b2 = sign(pt_x, pt_y, v2_x, v2_y, v3_x, v3_y) < 0.0f;
+  b3 = sign(pt_x, pt_y, v3_x, v3_y, v1_x, v1_y) < 0.0f;
+
+  return ((b1 == b2) && (b2 == b3));
+}
+
+
+//void initStuff(){
+  //image = Mat::zeros( w, w, CV_8UC3 ); 
+//}
+
+
+void drawStuff(){
+  
+  //draw background
+  Point up_points[1][3];
+  Point down_points[1][3];
+  Point right_points[1][3];
+  Point left_points[1][3];
+     
+  up_points[0][0] = Point( (w/2)+padding, padding);
+  up_points[0][1] = Point( (w/3)+padding, (w/3) + padding);
+  up_points[0][2] = Point( ((2*w)/3)+padding, (w/3) + padding); 
+  
+  down_points[0][0] = Point( (w/2)+padding, w+padding);
+  down_points[0][1] = Point( (w/3)+padding, ((2*w)/3)+padding);
+  down_points[0][2] = Point( ((2*w)/3)+padding, ((2*w)/3)+padding );  
+ 
+  right_points[0][0] = Point( ((2*w)/3)+padding, (w/3) + padding);
+  right_points[0][1] = Point( w+padding, (w/2)+padding);
+  right_points[0][2] = Point( ((2*w)/3)+padding, ((2*w)/3)+padding); 
+  
+  left_points[0][0] = Point( (w/3) + padding, (w/3) + padding);
+  left_points[0][1] = Point( padding, (w/2)+padding);
+  left_points[0][2] = Point( (w/3) + padding, ((2*w)/3)+padding);   
+  
+  const Point* ppt_up[1] = { up_points[0] };  
+  const Point* ppt_down[1] = { down_points[0] };   
+  const Point* ppt_right[1] = { right_points[0] };  
+  const Point* ppt_left[1] = { left_points[0] };  
+  
+  int npt[]= { 3 };
+  image = Mat::zeros(total_length, total_width, CV_8UC3 );
+    
+  fillPoly(image, ppt_up, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+  fillPoly(image, ppt_down, npt, 1, Scalar( bottom_rgb[0], bottom_rgb[1], bottom_rgb[2]), 8 );
+  fillPoly(image, ppt_right, npt, 1, Scalar( right_rgb[0], right_rgb[1], right_rgb[2]), 8 );  
+  fillPoly(image, ppt_left, npt, 1, Scalar( left_rgb[0], left_rgb[1], left_rgb[2]), 8 );  
+  
+  //also draw a button down below
+  
+
+  rectangle(image, Point(followButton_x1, followButton_y1), Point(followButton_x2, followButton_y2), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(databaseButton_x1, databaseButton_y1), Point(databaseButton_x2, databaseButton_y2), Scalar(255, 255, 255), -1, 8);
+ 
+  putText(image, "Manual", Point(10, 15), 1, 1.0, Scalar(0, 0, 255), 1, 8);
+  putText(image, "Automatic", Point(10, 320), 1, 1.0, Scalar(0, 0, 255), 1, 8);
+  putText(image, "Map", Point(350, 15), 1, 1.0, Scalar(0, 0, 255), 1, 8); 
+
+  if(robotState==MANUAL){ //change button text depending on robot's state
+      putText(image, "Follow", Point(150, 355), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  }
+  else{
+      putText(image, "Stop Following", Point(150, 355), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  }
+
+  
+  if(!databaseConnected){ //change button text depending on robot's state
+      putText(image, "Connect Database", Point(100, 400), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  }
+  else{
+      putText(image, "Disconnect Database", Point(100, 400), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  }
+ 
+  
+
+    //else{
+        //cv::resize(mapImage, image,cv::Size(),3,3,cv::INTER_NEAREST);
+        
+        //imshow(aWin, mapImage_smaller);
+       //cv::Rect roi = cv::Rect(50,50, 50, 50);
+       cv::Rect roi = cv::Rect(350, padding*2, mapImage_smaller.cols, mapImage_smaller.rows);
+       cv::Mat subView = image(roi); //problem 
+       mapImage_smaller.copyTo(subView); 
+       imshow(aWin, image);
+       
+       
+    //}
+
+    /*
+cv::Mat big;
+cv::Mat small;
+
+// Define roi area (it has small image dimensions). 
+cv::Rect roi = cv::Rect(50,50, small.cols, small.rows);
+
+// Take a sub-view of the large image
+cv::Mat subView = big(roi); 
+
+// Copy contents of the small image to large
+small.copyTo(subView); 
+    */
+ /*
+  putText( image, "Testing text rendering", org, rng.uniform(0,8),
+         rng.uniform(0,100)*0.05+0.1, randomColor(rng), rng.uniform(1, 10), lineType);
+
+So, what does the function putText do? In our example:
+
+    Draws the text “Testing text rendering” in image
+    The bottom-left corner of the text will be located in the Point org
+    The font type is a random integer value in the range: [0, 8>.
+    The scale of the font is denoted by the expression rng.uniform(0, 100)x0.05 + 0.1 (meaning its range is: [0.1, 5.1>)
+    The text color is random (denoted by randomColor(rng))
+    The text thickness ranges between 1 and 10, as specified by rng.uniform(1,10)
+
+
+  */ 
+  //imshow(aWin, image);
+
+}
+      /*
+       ros::Publisher chatter_pub;
+       ros::Rate loop_rate(10);
+       msg.value = 6;
+       chatter_pub = n.advertise<kobuki_msgs::Sound>("/mobile_base/commands/sound", 1000);
+       ROS_INFO("%d", msg.value);
+       chatter_pub.publish(msg);
+       ros::spinOnce();
+       loop_rate.sleep();
+       */
+	//++count;
+	
+	
+void CallBackFunc(int event, int x, int y, int flags, void* userdata)
+{
+  
+  rosStuff* r=(rosStuff*)userdata;
+  
+  if(event == EVENT_LBUTTONDOWN){
+    cout << x << ", " << y << endl;
+    //fPoint clickedPt;
+    //clickedPt.x=x;  clickedPt.y=x;
+    if((pointInTriangle(x, y, (w/2)+padding, padding, (w/3)+padding, (w/3) + padding, ((2*w)/3)+padding, (w/3) + padding))
+      && robotState==MANUAL){ //up
+       up_rgb[0] = 255; up_rgb[1] = 0; up_rgb[2] = 0;   
+       bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];  
+       right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+       left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+       
+       
+       drawStuff(); //give immediate feedback
+	 
+	 
+    /*
+         ros::NodeHandle n;
+  ros::Publisher motor_pub;
+  ros::Publisher sound_pub; 
+  sound_play::SoundClient sc;
+  ros::ServiceClient followServiceClient;
+  turtlebot_msgs::SetFollowState followCommand;
+  geometry_msgs::Twist movementCommand;
+  */
+       //because ros is obnoxious and doesn't allow global vars before ros;;init, make variables each time T_T
+       //ros::NodeHandle n;
+       //ros::Publisher motor_pub = n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 10); //1000
+       ros::Rate loop_rate(10);
+       //geometry_msgs::Twist movementCommand;
+       r->movementCommand=geometry_msgs::Twist(); //init
+       r->movementCommand.linear.x = 0.1;
+       //movementCommand.linear.y = 0.0;  
+      // movementCommand.linear.z = 0.0;       
+       //movementCommand.angular.x = 0.0;
+      // movementCommand.angular.y = 0.0;  
+      // movementCommand.angular.z = 0.0;   
+       //ROS_INFO("%d", msg.value);
+
+       for(int i=0; i< 10; ++i){
+	 r->motor_pub.publish(r->movementCommand);
+         ros::spinOnce(); 
+         loop_rate.sleep();   
+       }
+       loop_rate.sleep();  
+       loop_rate.sleep();  
+       
+       r->movementCommand.linear.x = 0.0;
+       r->motor_pub.publish(r->movementCommand);
+       ros::spinOnce();
+       loop_rate.sleep(); 
+       
+       if(ROBOT_VERBOSITY==TALKATIVE){
+		      //say sound 
+		      //ros::NodeHandle nh;
+		     // sound_play::SoundClient sc;
+		      ros::spinOnce();
+                       loop_rate.sleep(); 
+		      sleepok(1, r->n);
+		      if(r->n.ok()){
+			r->sc.say("Forwards");
+			ros::spinOnce();
+                          loop_rate.sleep(); 
+			sleepok(2, r->n); 
+		      }
+		      /*
+		      waitKey(400);
+		      if(nh.ok()){
+			sc.say("Forwards");
+			ros::spinOnce();
+                          loop_rate.sleep(); 
+			sleepok(2, nh); 
+		      }
+		      waitKey(400);
+		      if(nh.ok()){
+			sc.say("Forwards");
+			ros::spinOnce();
+                          loop_rate.sleep(); 
+			sleepok(2, nh); 
+		      }
+		      */
+	}
+		    
+       /**/
+      // rostopic pub -1 /mobile_base/commands/velocity geometry_msgs/Twist '[0.1, 0, 0]' '[0, 0, 0]' && 
+      // rostopic pub -1 /mobile_base/commands/velocity geometry_msgs/Twist  -- '[0, 0, 0]' '[0, 0, 0]'
+	 
+    }
+    else{
+       if((pointInTriangle(x, y, (w/3) + padding, (w/3) + padding, padding, (w/2)+padding, (w/3) + padding, ((2*w)/3)+padding))
+       && robotState==MANUAL){ //left
+	  up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+	  bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];  
+	  right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+	  left_rgb[0] = 255; left_rgb[1] = 0; left_rgb[2] = 0;
+	  
+     //  ros::NodeHandle n;  
+      // ros::Publisher motor_pub = n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 10); //1000
+       ros::Rate loop_rate(10);
+        r->movementCommand=geometry_msgs::Twist(); //init
+       
+     //  geometry_msgs::Twist movementCommand;
+     //  movementCommand.linear.x = 0.0;
+      // movementCommand.linear.y = 0.0;  
+      // movementCommand.linear.z = 0.0;       
+      // movementCommand.angular.x = 0.0;
+      // movementCommand.angular.y = 0.0;  
+       r->movementCommand.angular.z = 0.5;   
+       //ROS_INFO("%d", msg.value);
+
+       for(int i=0; i< 10; ++i){
+	 r->motor_pub.publish(r->movementCommand);
+         ros::spinOnce(); 
+         loop_rate.sleep();   
+       }
+       loop_rate.sleep();  
+       loop_rate.sleep();  
+       
+       r->movementCommand.angular.z = 0.0;
+       r->motor_pub.publish(r->movementCommand);
+       ros::spinOnce();
+       loop_rate.sleep();	  
+	  
+	  
+       }
+       else{
+	if((pointInTriangle(x, y, (w/2)+padding, w+padding, (w/3)+padding, ((2*w)/3)+padding, ((2*w)/3)+padding, ((2*w)/3)+padding))
+	&& robotState==MANUAL){ //bottom
+	  up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+	  bottom_rgb[0]  = 255; bottom_rgb[1] = 0; bottom_rgb[2] = 0;   
+	  right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+	  left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+	  
+       //ros::NodeHandle n;
+      // ros::Publisher motor_pub = n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 10); //1000
+       ros::Rate loop_rate(10);
+      // geometry_msgs::Twist movementCommand;
+        r->movementCommand=geometry_msgs::Twist(); //init
+       r->movementCommand.linear.x = -0.1;
+     //  movementCommand.linear.y = 0.0;  
+     //  movementCommand.linear.z = 0.0;       
+     //  movementCommand.angular.x = 0.0;
+     //  movementCommand.angular.y = 0.0;  
+     //  movementCommand.angular.z = 0.0;   
+       //ROS_INFO("%d", msg.value);
+
+       for(int i=0; i< 10; ++i){
+	 r->motor_pub.publish(r->movementCommand);
+         ros::spinOnce(); 
+         loop_rate.sleep();   
+       }
+       loop_rate.sleep();  
+       loop_rate.sleep();  
+       
+       r->movementCommand.linear.x = 0.0;
+       r->motor_pub.publish(r->movementCommand);
+       ros::spinOnce();
+       loop_rate.sleep();	  
+       
+         } 
+         else{
+	    if((pointInTriangle(x, y, ((2*w)/3)+padding, (w/3) + padding, w+padding, (w/2)+padding, ((2*w)/3)+padding, ((2*w)/3)+padding))
+	    && robotState==MANUAL){ //right
+	      up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+	      bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];    
+	      right_rgb[0] = 255; right_rgb[1] = 0; right_rgb[2] = 0;  
+	      left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+	      
+       //ros::NodeHandle n;    
+       //ros::Publisher motor_pub = n.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 10); //1000
+       ros::Rate loop_rate(10);
+      // geometry_msgs::Twist movementCommand;
+        r->movementCommand=geometry_msgs::Twist(); //init
+      // movementCommand.linear.x = 0.0;
+     //  movementCommand.linear.y = 0.0;  
+     //  movementCommand.linear.z = 0.0;       
+     //  movementCommand.angular.x = 0.0;
+     //  movementCommand.angular.y = 0.0;  
+       r->movementCommand.angular.z = -0.5;   
+       //ROS_INFO("%d", msg.value);
+
+       for(int i=0; i< 10; ++i){
+	 r->motor_pub.publish(r->movementCommand);
+         ros::spinOnce(); 
+         loop_rate.sleep();   
+       }
+       loop_rate.sleep();  
+       loop_rate.sleep();  
+       
+       r->movementCommand.angular.z = 0.0;
+       r->motor_pub.publish(r->movementCommand);
+       ros::spinOnce();
+       loop_rate.sleep();	 	      
+	      
+	    } 	 
+	    else{ //check if follow "button" was pressed
+		if(x > followButton_x1 && x < followButton_x2 && y>followButton_y1 && y<followButton_y2){
+		 // ros::NodeHandle n;
+		  //ros::ServiceClient client = n.serviceClient<turtlebot_msgs::SetFollowState>("/turtlebot_follower/change_state");
+		 // turtlebot_msgs::SetFollowState srv;
+		  if(robotState==FOLLOWING){
+		    r->followCommand.request.state = 0; //STOP
+		    robotState=MANUAL;
+		    //change colors on manual arrows, enable
+		    up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+		    bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];    
+		    right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2];  
+		    left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 		    
+
+		  }
+		  else{
+		    r->followCommand.request.state = 1; //START
+		    robotState=FOLLOWING;
+		    //change colors on manual arrows
+		    up_rgb[0] = off_rgb[0]; up_rgb[1] = off_rgb[1]; up_rgb[2] = off_rgb[2];  
+		    bottom_rgb[0] = off_rgb[0]; bottom_rgb[1] = off_rgb[1]; bottom_rgb[2] = off_rgb[2];    
+		    right_rgb[0] = off_rgb[0]; right_rgb[1] = off_rgb[1]; right_rgb[2] = off_rgb[2];  
+		    left_rgb[0] = off_rgb[0]; left_rgb[1] = off_rgb[1]; left_rgb[2] = off_rgb[2]; 
+		    /*
+		    if(ROBOT_VERBOSITY==TALKATIVE){
+		      //say sound 
+		      //ros::NodeHandle nh;
+		      //sound_play::SoundClient sc;
+		      sleepok(1, nh);
+		      if(nh.ok()){
+			sc.say("Following");
+			sleepok(2, nh); 
+		      }
+		    }
+		    */
+		  }
+		  if (r->followServiceClient.call(r->followCommand)){
+		    ROS_INFO("Result: %ld", (long int)r->followCommand.response.result);
+		  }
+		  else{
+		    ROS_ERROR("Failed to call service. very sucky");		    
+		  }
+		}
+	    }
+	    
+	}
+      }
+    }    
+  }
+  
+ 
+  //need to redraw
+  drawStuff();
+    
+}
+
+void sleepok(int t, ros::NodeHandle &nh)
+{
+   if (nh.ok())
+     sleep(t);
+ }
+
+int NOTUSED_main( void ){
+
+
+
+  namedWindow(aWin, 1);
+  setMouseCallback(aWin, CallBackFunc, NULL);
+  moveWindow(aWin, 0, 200);
+  
+  drawStuff();
+  
+  waitKey(0);
+  return(0);
+}
+
+
+
+/*
+
+//useless stuff follows...
+
+void MyEllipse( Mat img, double angle )
+{
+  int thickness = 2;
+  int lineType = 8;
+
+  ellipse( img,
+       Point( w/2, w/2 ),
+       Size( w/4, w/16 ),
+       angle,
+       0,
+       360,
+       Scalar( 255, 0, 0 ),
+       thickness,
+       lineType );
+}
+
+
+void MyFilledCircle( Mat img, Point center )
+{
+  int thickness = -1;
+  int lineType = 8;
+
+  circle( img,
+      center,
+      w/32,
+      Scalar( 0, 0, 255 ),
+      thickness,
+      lineType );
+}
+
+void MyPolygon( Mat img )
+{
+  int lineType = 8;
+
+
+  Point rook_points[1][20];
+  rook_points[0][0] = Point( w/4, 7*w/8 );
+  rook_points[0][1] = Point( 3*w/4, 7*w/8 );
+  rook_points[0][2] = Point( 3*w/4, 13*w/16 );
+  rook_points[0][3] = Point( 11*w/16, 13*w/16 );
+  rook_points[0][4] = Point( 19*w/32, 3*w/8 );
+  rook_points[0][5] = Point( 3*w/4, 3*w/8 );
+  rook_points[0][6] = Point( 3*w/4, w/8 );
+  rook_points[0][7] = Point( 26*w/40, w/8 );
+  rook_points[0][8] = Point( 26*w/40, w/4 );
+  rook_points[0][9] = Point( 22*w/40, w/4 );
+  rook_points[0][10] = Point( 22*w/40, w/8 );
+  rook_points[0][11] = Point( 18*w/40, w/8 );
+  rook_points[0][12] = Point( 18*w/40, w/4 );
+  rook_points[0][13] = Point( 14*w/40, w/4 );
+  rook_points[0][14] = Point( 14*w/40, w/8 );
+  rook_points[0][15] = Point( w/4, w/8 );
+  rook_points[0][16] = Point( w/4, 3*w/8 );
+  rook_points[0][17] = Point( 13*w/32, 3*w/8 );
+  rook_points[0][18] = Point( 5*w/16, 13*w/16 );
+  rook_points[0][19] = Point( w/4, 13*w/16 );
+
+  const Point* ppt[1] = { rook_points[0] };
+  int npt[] = { 20 };
+
+  fillPoly( img,
+        ppt,
+        npt,
+            1,
+        Scalar( 255, 255, 255 ),
+        lineType );
+}
+
+
+void MyLine( Mat img, Point start, Point end )
+{
+  int thickness = 2;
+  int lineType = 8;
+  line( img,
+    start,
+    end,
+    Scalar( 0, 0, 0 ),
+    thickness,
+    lineType );
+}
+
+*/

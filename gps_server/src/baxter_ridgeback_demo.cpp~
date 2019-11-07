@@ -1,0 +1,734 @@
+
+//INCLUDES
+
+#include "ros/ros.h"
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>  
+#include <iostream>
+#include <string>
+#include <vector>
+#include <stdio.h>
+#include "serial.hpp" //important for you
+#include "std_msgs/String.h"
+
+//DEFINES
+
+#define padding 15
+#define base_width 300 
+#define button_pannel_w base_width
+#define button_pannel_l 50
+#define total_width 1200 //1100 
+#define total_length 600 //450
+
+
+
+//NAMESPACES
+
+using namespace std;
+using namespace cv;
+
+
+
+//FUNCTION DECLARATIONS
+
+void drawStuff();
+float sign(float p1_x, float p1_y, float p2_x, float p2_y, float p3_x, float p3_y);
+bool pointInTriangle(float pt_x, float pt_y, float v1_x, float v1_y, float v2_x, float v2_y, float v3_x, float v3_y);
+void mouseCallBackFunc(int event, int x, int y, int flags, void* userdata);
+void sleepok(int t, ros::NodeHandle &nh);
+
+
+//GLOBAL VARS
+
+//interface
+char aWin[] = "Simple Baxter Ridgeback demo";
+int up_rgb[] = {255, 255, 255};
+int bottom_rgb[] = {255, 255, 255};
+int right_rgb[] = {255, 255, 255};
+int left_rgb[] = {255, 255, 255};
+int default_rgb[] = {255, 255, 255};
+int off_rgb[] = {127, 127, 127};
+Mat image;
+
+int text_offset_x=10, text_offset_y=20;
+int col1_x=430, col2_x=560;
+
+
+int USE_BAXTER = 0;
+int USE_RIDGEBACK = 0;
+
+
+//CLASSES
+
+class rosStuff{
+  public:
+  ros::NodeHandle n;
+  ros::Publisher top_pub; 
+  ros::Subscriber top_sub; 
+  ros::Publisher bottom_pub; 
+  ros::Subscriber bottom_sub; 
+};
+
+char mySendBuf[256];
+char myRecBuf[256];
+
+
+void fromBaxterCallback(const std_msgs::String::ConstPtr& msg){
+  ROS_INFO("%s", msg->data.c_str());
+}
+
+void fromRidgebackCallback(const std_msgs::String::ConstPtr& msg){
+  ROS_INFO("%s", msg->data.c_str());
+}
+
+
+// MAIN FUNCTION
+
+
+int main(int argc, char **argv){
+  
+  ros::init(argc, argv, "baxter_ridgeback_demo");
+  ROS_INFO("baxter_ridgeback_demo gui: DEC 2016");
+  ros::Time::init();
+
+  ros::Rate loop_rate(10);
+  rosStuff stuff;
+
+  stuff.top_pub= stuff.n.advertise<std_msgs::String>("to_baxter", 1000);
+  stuff.top_sub = stuff.n.subscribe("from_baxter", 1000, fromBaxterCallback);
+
+  stuff.bottom_pub= stuff.n.advertise<std_msgs::String>("to_ridgeback", 1000);
+  stuff.bottom_sub = stuff.n.subscribe("from_ridgeback", 1000, fromRidgebackCallback);
+
+
+  namedWindow(aWin, 1);
+  setMouseCallback(aWin, mouseCallBackFunc, &stuff); 
+  moveWindow(aWin, 100, 0);
+
+  drawStuff();
+
+  loop_rate.sleep();
+  loop_rate.sleep();
+  loop_rate.sleep();	      
+  ros::spinOnce();
+  loop_rate.sleep();
+
+
+ // serialSetup();
+
+  int keyPressed=0;
+  while(keyPressed!=27 && ros::ok()){ //27 is ESC
+    ros::spinOnce();
+    loop_rate.sleep();
+    keyPressed= waitKey(10); 
+
+  }
+
+  //serialClose();
+
+  return 0;
+}
+
+
+  
+//functions to determine if point is within a triangle  
+float sign(float p1_x, float p1_y, float p2_x, float p2_y, float p3_x, float p3_y){
+  
+  return (p1_x - p3_x) * (p2_y - p3_y) - (p2_x - p3_x) * (p1_y - p3_y);
+}
+bool pointInTriangle(float pt_x, float pt_y, float v1_x, float v1_y, float v2_x, float v2_y, float v3_x, float v3_y){
+  
+  bool b1, b2, b3;
+
+  b1 = sign(pt_x, pt_y, v1_x, v1_y, v2_x, v2_y) < 0.0f;
+  b2 = sign(pt_x, pt_y, v2_x, v2_y, v3_x, v3_y) < 0.0f;
+  b3 = sign(pt_x, pt_y, v3_x, v3_y, v1_x, v1_y) < 0.0f;
+
+  return ((b1 == b2) && (b2 == b3));
+}
+
+
+void drawStuff(){
+  
+  //draw arrows
+  Point up_points[1][3];
+  Point down_points[1][3];
+  Point right_points[1][3];
+  Point left_points[1][3];
+     
+  up_points[0][0] = Point( (base_width/2)+padding, padding);
+  up_points[0][1] = Point( (base_width/3)+padding, (base_width/3) + padding);
+  up_points[0][2] = Point( ((2*base_width)/3)+padding, (base_width/3) + padding); 
+  
+  down_points[0][0] = Point( (base_width/2)+padding, base_width+padding);
+  down_points[0][1] = Point( (base_width/3)+padding, ((2*base_width)/3)+padding);
+  down_points[0][2] = Point( ((2*base_width)/3)+padding, ((2*base_width)/3)+padding );  
+ 
+  right_points[0][0] = Point( ((2*base_width)/3)+padding, (base_width/3) + padding);
+  right_points[0][1] = Point( base_width+padding, (base_width/2)+padding);
+  right_points[0][2] = Point( ((2*base_width)/3)+padding, ((2*base_width)/3)+padding); 
+  
+  left_points[0][0] = Point( (base_width/3) + padding, (base_width/3) + padding);
+  left_points[0][1] = Point( padding, (base_width/2)+padding);
+  left_points[0][2] = Point( (base_width/3) + padding, ((2*base_width)/3)+padding);   
+  
+  const Point* ppt_up[1] = { up_points[0] };  
+  const Point* ppt_down[1] = { down_points[0] };   
+  const Point* ppt_right[1] = { right_points[0] };  
+  const Point* ppt_left[1] = { left_points[0] };  
+  
+  int npt[]= { 3 };
+  image = Mat::zeros(total_length, total_width, CV_8UC3 );
+    
+  fillPoly(image, ppt_up, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+  fillPoly(image, ppt_down, npt, 1, Scalar( bottom_rgb[0], bottom_rgb[1], bottom_rgb[2]), 8 );
+  fillPoly(image, ppt_right, npt, 1, Scalar( right_rgb[0], right_rgb[1], right_rgb[2]), 8 );  
+  fillPoly(image, ppt_left, npt, 1, Scalar( left_rgb[0], left_rgb[1], left_rgb[2]), 8 );  
+ 
+  //add new diagonal arrows
+  Point up_left_points[1][3];
+  Point up_right_points[1][3];
+  Point down_left_points[1][3];
+  Point down_right_points[1][3];
+
+  up_left_points[0][0] = Point( padding, padding);
+  up_left_points[0][1] = Point( (base_width/3)+padding, padding );
+  up_left_points[0][2] = Point( padding, (base_width/3)+padding );
+
+  up_right_points[0][0] = Point( base_width+padding, padding);
+  up_right_points[0][1] = Point( ((2*base_width)/3)+padding, padding );
+  up_right_points[0][2] = Point( base_width+padding, (base_width/3)+padding );
+
+  down_left_points[0][0] = Point( padding, ((2*base_width)/3)+padding );
+  down_left_points[0][1] = Point( (base_width/3)+padding, base_width+padding);
+  down_left_points[0][2] = Point( padding, base_width+padding );
+
+  down_right_points[0][0] = Point( base_width+padding, ((2*base_width)/3)+padding );
+  down_right_points[0][1] = Point( ((2*base_width)/3)+padding, base_width+padding );
+  down_right_points[0][2] = Point( base_width+padding, base_width+padding );
+
+
+  const Point* ppt_up_left[1] = { up_left_points[0] };
+  const Point* ppt_up_right[1] = { up_right_points[0] };
+  const Point* ppt_down_left[1] = { down_left_points[0] };
+  const Point* ppt_down_right[1] = { down_right_points[0] };
+
+  fillPoly(image, ppt_up_left, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+  fillPoly(image, ppt_up_right, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+  fillPoly(image, ppt_down_left, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+  fillPoly(image, ppt_down_right, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+
+
+  //add new rotate arrows
+  Point rot_left_points[1][3];
+  Point rot_right_points[1][3];
+
+  rot_left_points[0][0] = Point( (base_width/3) + padding, (base_width/3) + padding + 220);
+  rot_left_points[0][1] = Point( padding, (base_width/2)+padding + 220);
+  rot_left_points[0][2] = Point( (base_width/3) + padding, ((2*base_width)/3)+padding + 220) ;
+
+  rot_right_points[0][0] = Point( ((2*base_width)/3)+padding, (base_width/3) + padding + 220);
+  rot_right_points[0][1] = Point( base_width+padding, (base_width/2)+padding + 220);
+  rot_right_points[0][2] = Point( ((2*base_width)/3)+padding, ((2*base_width)/3)+padding + 220); 
+
+  const Point* ppt_rot_left[1] = { rot_left_points[0] };
+  const Point* ppt_rot_right[1] = { rot_right_points[0] };
+
+  fillPoly(image, ppt_rot_left, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+  fillPoly(image, ppt_rot_right, npt, 1, Scalar( up_rgb[0], up_rgb[1], up_rgb[2]), 8 );
+
+
+
+
+
+  //draw buttons   
+  rectangle(image, Point(col1_x, 10), Point(col1_x+120, 40), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 10), Point(col2_x+120, 40), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col1_x, 50), Point(col1_x+120, 80), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 50), Point(col2_x+120, 80), Scalar(255, 255, 255), -1, 8);
+
+  rectangle(image, Point(col1_x, 90), Point(col1_x+120, 120), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 90), Point(col2_x+120, 120), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col1_x, 130), Point(col1_x+120, 160), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 130), Point(col2_x+120, 160), Scalar(255, 255, 255), -1, 8);
+
+  rectangle(image, Point(col1_x, 170), Point(col1_x+120, 200), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 170), Point(col2_x+120, 200), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col1_x, 210), Point(col1_x+120, 240), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 210), Point(col2_x+120, 240), Scalar(255, 255, 255), -1, 8);
+
+  rectangle(image, Point(col1_x, 250), Point(col1_x+120, 280), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 250), Point(col2_x+120, 280), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col1_x, 290), Point(col1_x+120, 320), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 290), Point(col2_x+120, 320), Scalar(255, 255, 255), -1, 8);
+
+  rectangle(image, Point(col1_x, 330), Point(col1_x+120, 360), Scalar(122, 122, 122), -1, 8);
+  rectangle(image, Point(col2_x, 330), Point(col2_x+120, 360), Scalar(122, 122, 122), -1, 8);
+  rectangle(image, Point(col1_x, 370), Point(col1_x+120, 400), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 370), Point(col2_x+120, 400), Scalar(255, 255, 255), -1, 8);
+
+  rectangle(image, Point(col1_x, 410), Point(col1_x+120, 440), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(col2_x, 410), Point(col2_x+120, 440), Scalar(255, 255, 255), -1, 8);
+
+ 
+  putText(image, "Enable", Point(col1_x+text_offset_x, 10+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Disable", Point(col2_x+text_offset_x, 10+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Head left", Point(col1_x+text_offset_x, 50+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Head neutral", Point(col2_x+text_offset_x, 50+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Face happy", Point(col1_x+text_offset_x, 90+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Face neutral", Point(col2_x+text_offset_x, 90+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Arms neutral", Point(col1_x+text_offset_x, 130+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Record pose", Point(col2_x+text_offset_x, 130+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Record done", Point(col1_x+text_offset_x, 170+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Playback", Point(col2_x+text_offset_x, 170+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Grip close", Point(col1_x+text_offset_x, 210+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Grip open", Point(col2_x+text_offset_x, 210+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Arm wave", Point(col1_x+text_offset_x, 250+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Arm angles", Point(col2_x+text_offset_x, 250+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Rid left", Point(col1_x+text_offset_x, 290+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Rid right", Point(col2_x+text_offset_x, 290+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Use Bax", Point(col1_x+text_offset_x, 330+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Use Rid", Point(col2_x+text_offset_x, 330+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Grip cal", Point(col1_x+text_offset_x, 370+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "j", Point(col2_x+text_offset_x, 370+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "z", Point(col1_x+text_offset_x, 410+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, " ", Point(col2_x+text_offset_x, 370+text_offset_y), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+
+
+/*
+
+  rectangle(image, Point(30, 350), Point(30+120, 380), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(180, 350), Point(180+120, 380), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(330, 350), Point(330+120, 380), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(480, 350), Point(480+120, 380), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(30, 400), Point(30+120, 400+30), Scalar(255, 255, 255), -1, 8);
+  rectangle(image, Point(180, 400), Point(180+120, 400+30), Scalar(255, 255, 255), -1, 8);
+
+  putText(image, "Eyes Left", Point(30+10, 350+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Eyes Right", Point(180+10, 350+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Eyes Center", Point(330+10, 350+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Eyes to X", Point(480+10, 350+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Body Center", Point(30+10, 400+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+  putText(image, "Body to X", Point(180+10, 400+20), 1, 1.0, Scalar(0, 0, 0), 1, 8);
+
+ */
+  imshow(aWin, image);
+}
+
+
+ 
+
+
+void mouseCallBackFunc(int event, int x, int y, int flags, void* userdata){  //mouse callback
+  
+  rosStuff* r=(rosStuff*)userdata;
+  time_t t = time(0);  
+  
+  
+  if(event == EVENT_LBUTTONDOWN){
+    cout << x << ", " << y << endl;
+    if(USE_RIDGEBACK &&
+(pointInTriangle(x, y, (base_width/2)+padding, padding, (base_width/3)+padding, (base_width/3) + padding, ((2*base_width)/3)+padding, (base_width/3) + padding)) 
+
+    ){ //up
+    
+      //lastMotionEventProcced=t;
+      ROS_INFO("Pressed Arrow Up");
+      up_rgb[0] = 255; up_rgb[1] = 0; up_rgb[2] = 0;   
+      bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];  
+      right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+      left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+           
+      drawStuff();
+      ros::Rate loop_rate(10);
+      
+      std_msgs::String msg;
+      std::stringstream ss;
+      ss << "0";
+      msg.data = ss.str();
+      r->bottom_pub.publish(msg);
+
+      ros::spinOnce();
+      loop_rate.sleep(); 
+       
+    }
+    else if(
+USE_RIDGEBACK &&
+(pointInTriangle(x, y, (base_width/3) + padding, (base_width/3) + padding, padding, (base_width/2)+padding, (base_width/3) + padding, ((2*base_width)/3)+padding))
+){ //left
+      ROS_INFO("Pressed Arrow Left");
+      up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+      bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];  
+      right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+      left_rgb[0] = 255; left_rgb[1] = 0; left_rgb[2] = 0;
+	  
+      ros::Rate loop_rate(10);
+
+      std_msgs::String msg;
+      std::stringstream ss;
+      ss << "1";
+      msg.data = ss.str();
+      r->bottom_pub.publish(msg);
+
+      ros::spinOnce();
+      loop_rate.sleep();	  
+  
+    }
+    else if(
+USE_RIDGEBACK &&
+(pointInTriangle(x, y, (base_width/2)+padding, base_width+padding, (base_width/3)+padding, ((2*base_width)/3)+padding, ((2*base_width)/3)+padding, 
+      ((2*base_width)/3)+padding))
+){ //bottom
+      ROS_INFO("Pressed Arrow Down");    
+      up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+      bottom_rgb[0]  = 255; bottom_rgb[1] = 0; bottom_rgb[2] = 0;   
+      right_rgb[0] = default_rgb[0]; right_rgb[1] = default_rgb[1]; right_rgb[2] = default_rgb[2]; 
+      left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+	  
+      ros::Rate loop_rate(10);
+
+      std_msgs::String msg;
+      std::stringstream ss;
+      ss << "2";
+      msg.data = ss.str();
+      r->bottom_pub.publish(msg);
+
+      ros::spinOnce();
+      loop_rate.sleep();	  
+       
+    } 
+    else if(
+USE_RIDGEBACK &&
+(pointInTriangle(x, y, ((2*base_width)/3)+padding, (base_width/3) + padding, base_width+padding, (base_width/2)+padding, ((2*base_width)/3)+padding, 
+      ((2*base_width)/3)+padding))
+){ //right
+      ROS_INFO("Pressed Arrow Right");
+
+      up_rgb[0] = default_rgb[0]; up_rgb[1] = default_rgb[1]; up_rgb[2] = default_rgb[2];  
+      bottom_rgb[0] = default_rgb[0]; bottom_rgb[1] = default_rgb[1]; bottom_rgb[2] = default_rgb[2];    
+      right_rgb[0] = 255; right_rgb[1] = 0; right_rgb[2] = 0;  
+      left_rgb[0] = default_rgb[0]; left_rgb[1] = default_rgb[1]; left_rgb[2] = default_rgb[2]; 
+	      
+      ros::Rate loop_rate(10);
+ 
+      std_msgs::String msg;
+      std::stringstream ss;
+      ss << "3";
+      msg.data = ss.str();
+      r->bottom_pub.publish(msg);
+
+      ros::spinOnce();
+      loop_rate.sleep();	 	      
+	      
+    } 	
+ 
+
+    //the array of buttons
+
+    else if(USE_BAXTER && (x > col1_x) && (x < col1_x+120) && (y>10) && (y<40)){
+      	ROS_INFO("0");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "0";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_BAXTER && (x > col2_x) && (x < col2_x+120) && (y>10) && (y<40)){
+        ROS_INFO("1");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "1";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+   else if(USE_BAXTER && (x > col1_x) && (x < col1_x+120) && (y>50) && (y<80)){
+      	ROS_INFO("2");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "2";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_BAXTER && (x > col2_x) && (x < col2_x+120) && (y>50) && (y<80)){
+        ROS_INFO("3");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "3";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+   else if(USE_BAXTER && (x > col1_x) && (x < col1_x+120) && (y>90) && (y<120)){
+      	ROS_INFO("4");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "4";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_BAXTER && (x > col2_x) && (x < col2_x+120) && (y>90) && (y<120)){
+        ROS_INFO("5");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "5";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+
+   else if(USE_BAXTER && (x > col1_x) && (x < col1_x+120) && (y>130) && (y<160)){
+      	ROS_INFO("6");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "6";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_BAXTER && (x > col2_x) && (x < col2_x+120) && (y>130) && (y<160)){
+        ROS_INFO("7");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "7";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+
+
+   else if(USE_BAXTER && (x > col1_x) && (x < col1_x+120) && (y>170) && (y<200)){
+      	ROS_INFO("8");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "8";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_BAXTER && (x > col2_x) && (x < col2_x+120) && (y>170) && (y<200)){
+        ROS_INFO("9");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "9";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+
+   else if(USE_BAXTER && (x > col1_x) && (x < col1_x+120) && (y>210) && (y<240)){
+      	ROS_INFO("a");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "a";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_BAXTER && (x > col2_x) && (x < col2_x+120) && (y>210) && (y<240)){
+        ROS_INFO("b");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "b";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+
+   else if(USE_BAXTER && (x > col1_x) && (x < col1_x+120) && (y>250) && (y<280)){
+      	ROS_INFO("c");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "c";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_BAXTER && (x > col2_x) && (x < col2_x+120) && (y>250) && (y<280)){
+        ROS_INFO("d");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "d";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+
+   else if(USE_RIDGEBACK && (x > col1_x) && (x < col1_x+120) && (y>290) && (y<320)){
+      	ROS_INFO("e");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "4";
+        msg.data = ss.str();
+        r->bottom_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if(USE_RIDGEBACK && (x > col2_x) && (x < col2_x+120) && (y>290) && (y<320)){
+        ROS_INFO("f");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "5";
+        msg.data = ss.str();
+        r->bottom_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+
+   else if((x > col1_x) && (x < col1_x+120) && (y>330) && (y<360)){
+
+      	ROS_INFO("g");
+      	ROS_INFO("%i", USE_BAXTER);
+	USE_BAXTER = ((USE_BAXTER+1)%2);
+    	ros::spinOnce();
+    	
+    }
+    else if((x > col2_x) && (x < col2_x+120) && (y>330) && (y<360)){
+        ROS_INFO("h");
+      	ROS_INFO("%i",USE_RIDGEBACK);
+	USE_RIDGEBACK = ((USE_RIDGEBACK+1)%2);
+    	ros::spinOnce();
+    	
+    }
+
+
+   else if((x > col1_x) && (x < col1_x+120) && (y>370) && (y<400)){
+      	ROS_INFO("i");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "i";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if((x > col2_x) && (x < col2_x+120) && (y>370) && (y<400)){
+        ROS_INFO("j");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "j";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+   else if((x > col1_x) && (x < col1_x+120) && (y>410) && (y<440)){
+      	ROS_INFO("z");
+  	ros::Rate loop_rate(10);
+
+        std_msgs::String msg;
+        std::stringstream ss;
+        ss << "z";
+        msg.data = ss.str();
+        r->top_pub.publish(msg);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+    else if((x > col2_x) && (x < col2_x+120) && (y>410) && (y<440)){
+        ROS_INFO("unknown");
+  	ros::Rate loop_rate(10);
+
+    	ros::spinOnce();
+    	loop_rate.sleep();
+    }
+
+
+
+
+
+  }
+  
+  drawStuff();
+    
+}
+
+
+void sleepok(int t, ros::NodeHandle &nh){
+  
+  if(nh.ok())
+    sleep(t);
+}
+ 
+ 

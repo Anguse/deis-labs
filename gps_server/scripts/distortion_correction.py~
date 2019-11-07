@@ -1,0 +1,29 @@
+#!/usr/bin/env/python3
+"""
+Lens distortion correction: Abdallah Alabdallah
+Code integration:.........: Mujtaba Aldebes
+Date:.....................: 02/11/2018 
+Course:...................: Design Embedded and Intelligent Systems 
+"""
+
+import numpy as np
+import cv2
+
+# https://docs.opencv.org/2.4/modules/imgproc/doc/geometric_transformations.html
+
+
+def undistored_gps_image_600x480(src):
+    cameraMatrix = np.array([[540.92809281, 0, 310.49944426], [0, 540.23283561, 227.12758261], [0, 0, 1]] , np.float64)
+    distCoeffs = np.array([[-4.01495171e-01, 1.93524711e-01, -1.71371113e-03, -1.11895861e-04, -3.48628258e-02]] , np.float64)
+    newCameraMatrix = np.array([[457.13543701, 0, 306.81114822], [0, 493.90228271, 223.85634775], [0, 0, 1]] , np.float64)
+
+    undistorted_image = cv2.undistort(src, cameraMatrix, distCoeffs, None, newCameraMatrix)
+    return undistorted_image
+
+def undistored_gps_image_800x600(src):
+    originalCameraMatrix=np.array([[2.42917322e+03, 0, 4.01544243e+02],[0, 2.67002603e+03, 2.98060737e+02],[0, 0, 1]],np.float64)
+    optimalCameraMatrix = np.array([[2.19283228e+03, 0, 3.97904991e+02],[0, 2.55864307e+03, 2.96362414e+02], [0, 0, 1]],np.float64)
+    distortionCoefficients = np.array([[ -2.64796139e+00, -4.11156776e+01, -1.23756171e-02, -1.36787515e-02, 9.89186016e+02]],np.float64)
+
+    undistorted_gps_image = cv2.undistort(src, originalCameraMatrix, distortionCoefficients, None, optimalCameraMatrix)
+    return undistorted_image

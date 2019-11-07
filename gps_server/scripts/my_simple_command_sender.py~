@@ -1,0 +1,90 @@
+#!/usr/bin/env python
+import rospy
+import numpy as np
+import cv2
+from subprocess import call
+import sys
+from std_msgs.msg import String
+import cv2.cv as cv
+import os
+
+class commandSender:
+	def __init__(self):
+
+		self.pubAction = rospy.Publisher('action', String, queue_size=10)
+		self.r=rospy.Rate(10)
+		self.r.sleep()
+
+		self.windowHeight=500#1080
+		self.windowWidth=500#1920 
+		self.current_screen_image = np.zeros((self.windowHeight, self.windowWidth, 3), dtype=np.uint8)
+
+
+def main():
+	rospy.init_node('commandSender', anonymous=True)
+
+	myCommandSender = commandSender()
+
+	#cv2.namedWindow("commandSender_screen", cv2.WND_PROP_FULLSCREEN)
+	#cv2.setWindowProperty("commandSender_screen", cv2.WND_PROP_FULLSCREEN, 1) 
+
+	cv2.imshow("commandSender_screen", myCommandSender.current_screen_image)
+	cv2.waitKey(100)
+
+	while True:
+
+		myCommandSender.r.sleep()
+		cv2.imshow("commandSender_screen", myCommandSender.current_screen_image)
+		key= cv2.waitKey(10) & 0xFF
+
+		if(key== ord("q")): 
+			print "Pressed q"
+			print "Quit"
+			break
+		elif(key== ord("f")):
+			print "Pressed f: Go forward"
+			commandMsg = ""+ str(rospy.get_time()) + ",g,-1,-1,-2,100;100" #set speed, from GPS, to robots with no platoon, all robots, speed should be 255 left wheel, 255 right wheel
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
+		elif(key== ord("b")):
+			print "Pressed b: Back"
+			commandMsg = ""+ str(rospy.get_time()) + ",g,-1,-1,-2,-100;-100" #set speed, from GPS, to robots with no platoon, all robots, speed should be -255 left wheel, -255 right wheel
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
+		elif(key== ord("l")):
+			print "Pressed l: Turn left"
+			commandMsg = ""+ str(rospy.get_time()) + ",g,-1,-1,-2,0;100" #set speed, from GPS, to robots with no platoon, all robots, speed should be 0 left wheel, 255 right wheel
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
+		elif(key== ord("r")):
+			print "Pressed r: Turn right"
+			commandMsg = ""+ str(rospy.get_time()) + ",g,-1,-1,-2,100;0" #set speed, from GPS, to robots with no platoon, all robots, speed should be 0 left wheel, 255 right wheel
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
+		elif(key== ord("s")):
+			print "Pressed s: Stop"
+			commandMsg = ""+ str(rospy.get_time()) + ",g,-1,-1,-2,0;0" #set speed, from GPS, to robots with no platoon, all robots, speed should be 255 left wheel, 255 right wheel
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
+
+
+
+	cv2.destroyAllWindows()
+
+
+if __name__== '__main__':
+
+    	print '-------------------------------------'
+    	print '-            TOLLGATE 2             -'
+    	print '-   OCT 2019, HH, Martin            -'
+    	print '-------------------------------------'
+
+	try:
+		main()
+	except rospy.ROSInterruptException:
+		pass
+	finally:
+		pass
+
+
+
