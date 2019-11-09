@@ -170,7 +170,6 @@ def listener():
     # name for our 'listener' node so that multiple listeners can
     # run simultaneously.
     rospy.init_node('listener', anonymous=True)
-
     rospy.Subscriber('josefoutput', String, gps_cb)
     rospy.Subscriber('action', String, action_cb)
     rospy.Subscriber('heartbeat', String, heartbeat_cb)
