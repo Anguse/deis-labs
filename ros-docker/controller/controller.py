@@ -2,16 +2,8 @@
 
 import serial
 import rospy
-import math
-from math import cos, sin, atan2, pi
 from logger import Logger
 from std_msgs.msg import String
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
-
-LINE_FOLLOWING_MODE   = 0
-LISTENING_MODE        = 1
-SHRIMP_FOLLOWING_MODE = 2
 
 class Controller:
     
@@ -27,8 +19,7 @@ class Controller:
         rospy.Subscriber('action', String, self.action_cb)
         rospy.Subscriber('heartbeat', String, self.heartbeat_cb)
         rospy.Subscriber('feedback', String, self.feedback_cb)
-        rospy.Subscribe('shrimp', String, self.shrimp_cb)
-        rospy.Subscribe('odom', Odometry, self.odom_cb)
+
 
     def init_arduino(self):
         self.serial = serial.Serial('/dev/ttyUSB0', 9600)
@@ -123,9 +114,7 @@ class Controller:
                 self.serial.write(chr(action_id)+chr(newMode)+endMarker)
             mode = newMode
         elif(action_id == 'i'):
-            print("turnAndTravel")       ## Never called from here
-        elif(action_id == 'j'):
-            print('free')
+            print("free")
         elif(action_id == 'k'):
             print("free")
         elif(action_id == 'l'):
@@ -172,87 +161,32 @@ class Controller:
             print("free")
 
     def heartbeat_cb(self,data):
-        params = data.data.split(',')	
-        timestamp = params[0]
-        platoon = params[1]
-        robot_id = int(params[2])
-        robot_type = int(params[3])
-        lane = int(params[4])
-        platoon_pos = int(params[5])
-        pose = params[6].split(';')
-        speed = params[7].split(';')
-        if robot_id != self.state['ID']:
-            rospy.loginfo(rospy.get_caller_id() + 'heartbeat %s', data.data)
+        rospy.loginfo(rospy.get_caller_id() + 'heartbeat %s', data.data)
 
     def feedback_cb(self,data):
         rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
-    
-    def shrimp_cb(self, data):
-        params = data.data.split(',')
-        timestamp = shrimp_pos[0]
-        x = shrimp_pos[1]
-        y = shrimp_pos[2]
-        dx = x - self.state['x']
-        dy = y - self.state['y']
-        if abs(dx) < 5 or abs(dy) < 5 or self.state['mode'] != SHRIMP_FOLLOWING_MODE or self.busy:
-            return
-        dist = sqrt(pow(dx,2)+pow(dy,2))
-        direction = atan2(dx,dy)
-        if self.serial:
-            # turn and travel
-            speed = 50
-            action_id = 'i'
-            self.serial.write(action_id+chr(self.state['theta'])+chr(direction)+chr(dist)+chr(speed)+endMarker)
-            self.busy = True
 
-    def odom_cb(self, data):
-        rospy.loginfo(rospy.get_caller_id() + ' odom %s', data)
+
 
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
-    init_state = {
-        'ID':0, 
-        'platoon':-1, 
-        'platoon_pos':1, 
-        'type':-1, 'lane':-1, 
-        'role':None, 
-        'mode':0, 
-        'speed':(0,0), 
-        'x':0, 
-        'y':0, 
-        'z':0, 
-        'theta':0
-        }
+    init_state = {'ID':0, 'platoon':-1, 'platoon_pos':1, 'type':-1, 'lane': -1, 'role':None, 'mode':0, 'speed': (0,0), 'x':0, 'y':0, 'z':0, 'theta':0}
     ctrl = Controller(init_state)
     #ctrl.init_arduino()
 
     r = rospy.Rate(1)
     while not rospy.is_shutdown():
         heartbeat_msg = str(rospy.get_time()) + ',' + \
-                        str(ctrl.state['platoon']) + ',' + \
-                        str(ctrl.state['ID']) + ',' + \
-                        str(ctrl.state['type']) + ',' + \
-                        str(ctrl.state['lane']) + ',' + \
-                        str(ctrl.state['platoon_pos']) + ',' + \
-                        str(ctrl.state['x']) + ';' + \
-                        str(ctrl.state['y']) + ';' + \
-                        str(ctrl.state['z']) + ';' + \
-                        str(ctrl.state['theta']) + ',' + \
-                        str(ctrl.state['speed'][0]) + ';' + \
-                        str(ctrl.state['speed'][1])
+                             str(ctrl.state['platoon']) + ',' + \
+                             str(ctrl.state['ID']) + ',' + \
+                             str(ctrl.state['type']) + ',' + \
+                             str(ctrl.state['lane']) + ',' + \
+                             str(ctrl.state['platoon_pos']) + ',' + \
+                             str(ctrl.state['x']) + ';' + str(ctrl.state['y']) + ';' + str(ctrl.state['z']) + ';' + str(ctrl.state['theta']) + ',' + \
+                             str(ctrl.state['speed'][0]) + ';' + str(ctrl.state['speed'][1])
         if ctrl.serial:
-            ## Read encoder and ultrasonic values
-            arduino_data = ctrl.serial.read_until('\n')
-            params = msg.split(',')
-            if len(params > 2):
-                left_enc = params[0]
-                right_enc = params[1]
-                ult_sonic = params[2][:-1]
-                print('')
-                print('     left encoder: ', left_enc)
-                print('    right_encoder: ', right_enc)
-                print('ultrasonic sensor: ', ult_sonic)
-                print('')
+            arduino_msg = ctrl.serial.read_until('\n')
+            print(arduino_msg)
             
         ctrl.heartbeat_pub.publish(heartbeat_msg)
         r.sleep()
