@@ -29,6 +29,7 @@ class Controller:
         rospy.Subscriber('feedback', String, self.feedback_cb)
         rospy.Subscribe('shrimp', String, self.shrimp_cb)
         rospy.Subscribe('odom', Odometry, self.odom_cb)
+        rospy.Subscribe('arduino', String, self.arduino_cb)
 
     def init_arduino(self):
         self.serial = serial.Serial('/dev/ttyUSB0', 9600)
@@ -208,6 +209,14 @@ class Controller:
     def odom_cb(self, data):
         rospy.loginfo(rospy.get_caller_id() + ' odom %s', data)
 
+    def arduino_cb(self, data):
+        params = data.data.split(',')
+        busy = params[0]
+        left_enc = params[1]
+        right_enc = params[2]
+        ult_sonic = params[3]
+        self.busy = bool(busy)
+
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
     init_state = {
@@ -240,19 +249,6 @@ if __name__ == "__main__":
                         str(ctrl.state['theta']) + ',' + \
                         str(ctrl.state['speed'][0]) + ';' + \
                         str(ctrl.state['speed'][1])
-        if ctrl.serial:
-            ## Read encoder and ultrasonic values
-            arduino_data = ctrl.serial.read_until('\n')
-            params = msg.split(',')
-            if len(params > 2):
-                left_enc = params[0]
-                right_enc = params[1]
-                ult_sonic = params[2][:-1]
-                print('')
-                print('     left encoder: ', left_enc)
-                print('    right_encoder: ', right_enc)
-                print('ultrasonic sensor: ', ult_sonic)
-                print('')
-            
+
         ctrl.heartbeat_pub.publish(heartbeat_msg)
         r.sleep()
