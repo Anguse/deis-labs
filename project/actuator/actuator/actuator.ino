@@ -5,8 +5,9 @@
 #define ECHO_PIN 13
 
 // Internal
-#define ACTION_SET_MODE  104
 #define ACTION_SET_SPEED 103
+#define ACTION_SET_MODE  104
+#define ACTION_TURN_TRAVEL 105
 
 #define LINE_FOLLOWING   0
 #define LISTENING        1
@@ -49,6 +50,7 @@ void setup()
   mode = LISTENING;
   encoder.clearEnc(BOTH);    // clear the encoder count
 }
+
 void recvWithEndMarker() {
     static byte ndx = 0;
     char endMarker = '\n';
@@ -72,6 +74,39 @@ void recvWithEndMarker() {
     }
 }
 
+void driveDistance(float distance, int motorPower)
+{
+  long lCount = 0;
+  long rCount = 0;
+  float numRev;
+  // debug
+  Serial.print("driveDistance() ");
+  Serial.print(distance);
+  Serial.print(" inches at ");
+  Serial.print(motorPower);
+  Serial.println(" power.");
+
+  numRev = (float) distance / wheelCirc;
+  Serial.println(numRev, 3);
+  encoder.clearEnc(BOTH);  // clear the encoder count
+  motors.drive(motorPower);
+
+  while (rCount < numRev*countsPerRev)
+  {
+    // while the left encoder is less than the target count -- debug print 
+    // the encoder values and wait -- this is a holding loop.
+    lCount = encoder.getTicks(LEFT);
+    rCount = encoder.getTicks(RIGHT);
+    Serial.print(lCount);
+    Serial.print("\t");
+    Serial.print(rCount);
+    Serial.print("\t");
+    Serial.println(numRev*countsPerRev);
+  }
+  // now apply "brakes" to stop the motors.
+  motors.brake();
+}
+
 typedef union {
  float floatingPoint;
  byte binary[4];
@@ -82,8 +117,8 @@ void loop(){
   long lCount = encoder.getTicks(LEFT);
   long rCount = encoder.getTicks(RIGHT);
   long sonic = 5000;  // Read from ultrasonic
-  float lWheelDist = (float)lCount/countsPerRev*wheelCirc;
-  float rWheelDist = (float)rCount/countsPerRev*wheelCirc;
+  volatile float lWheelDist = (float)lCount/countsPerRev*wheelCirc;
+  volatile float rWheelDist = (float)rCount/countsPerRev*wheelCirc;
   
   lWheelDist = 5.0;
   rWheelDist = 5.0;
@@ -106,6 +141,14 @@ void loop(){
   	  }
   	  motors.leftMotor(-serialDataLeft);
   	  motors.rightMotor(serialDataRight);
+    }else if(serialDataAction == ACTION_TURN_TRAVEL){
+      int serialDataTheta = receivedChars[1];
+      int serialDataDir = receivedChars[2];
+      int serialDataDist = receivedChars[3];
+      int serialDataSpeed = receivedChars[4];
+      // Calculate trajectory
+      // Travel
+      busy = 1;
     }else if(serialDataAction == ACTION_SET_MODE){
 	    serialDataMode = receivedChars[1];
 	    mode = serialDataMode-'0';
@@ -123,7 +166,7 @@ void loop(){
     // if only left is black -> move to right
     else if((left_outer.read() > LINETHRESHOLD) && (right_outer.read() < LINETHRESHOLD))
     {
-      leftSpeed = -(SPEED);
+      leftSpeed = -SPEED;
       rightSpeed = 0;
     }
     // if only right is black -> move to left

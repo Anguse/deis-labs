@@ -225,7 +225,7 @@ if __name__ == "__main__":
         'platoon_pos':1, 
         'type':-1, 'lane':-1, 
         'role':None, 
-        'mode':0, 
+        'mode':0,
         'speed':(0,0), 
         'x':0, 
         'y':0, 
