@@ -5,8 +5,8 @@ import rospy
 
 class Logger:
     def __init__(self):        
-        self.state = open("/home/ubuntu/catkin_ws/src/controller/logs/state.txt", "w+")
-        self.gps = open("/home/ubuntu/catkin_ws/src/controller/logs/gps.txt", "w+")
+        self.state = open("../logs/state.txt", "w+")
+        self.gps = open("../logs/gps.txt", "w+")
     def log_state(self, state):
         timestamp = rospy.get_time()
         row = {'timestamp': timestamp, 'state': state}
