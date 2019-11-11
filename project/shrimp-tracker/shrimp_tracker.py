@@ -4,6 +4,7 @@ from collections import deque
 from imutils.video import VideoStream
 import numpy as np
 import argparse
+import rospy
 import cv2
 import imutils
 import time
@@ -34,15 +35,17 @@ else:
 # allow the camera or video file to warm up
 time.sleep(2.0)
 
-# calculate the center of the image
-h = int(vs.get(cv2.CAP_PROP_FRAME_HEIGHT))
-w = int(vs.get(cv2.CAP_PROP_FRAME_WIDTH))
-
 
 #To resize frame width, height
 frameWidth = 560
 frameHeight = 750
 resizedFrame = (frameWidth,frameHeight)
+
+
+pub = rospy.Publisher('shrimp', String, queue_size = 10)
+rospy.init_node('talker', anonymous=True)
+rate = rospy.Rate(10) # 10hz
+
 
 # keep looping
 while True:
@@ -91,10 +94,9 @@ while True:
 		center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
 		centroid_x = center[0]
 		centroid_y = abs(center[1]-frameHeight)
-		f = open("X-Y_values.txt", "a")
-		f.write('X: '+str(centroid_x) +' '+ 'Y: '+str(centroid_y)+ '\n')
-		f.close()
-
+		#Send timestamp,x,y to controller
+		pos_str = str(rospy.get_time())+','+str(centroid_x)+','+str(centroid_y)
+		pub.publish(pos_str)
 
 
 		# only proceed if the radius meets a minimum size
@@ -120,7 +122,7 @@ while True:
 		cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
 
 	# show the frame to our screen
-	cv2.imshow("Frame", frame)
+	#cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF
 
 	# if the 'q' key is pressed, stop the loop
