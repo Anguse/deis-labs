@@ -30,7 +30,7 @@ if __name__ == "__main__":
     r = rospy.Rate(1.0)
     while not rospy.is_shutdown():
         arduino_data = serial.read_until('\n')
-        params = msg.split(',')
+        params = arduino_data.split(',')
         if len(params) > 2:
             busy = params[0]
             left_enc = params[1]

@@ -27,9 +27,9 @@ class Controller:
         rospy.Subscriber('action', String, self.action_cb)
         rospy.Subscriber('heartbeat', String, self.heartbeat_cb)
         rospy.Subscriber('feedback', String, self.feedback_cb)
-        rospy.Subscribe('shrimp', String, self.shrimp_cb)
-        rospy.Subscribe('odom', Odometry, self.odom_cb)
-        rospy.Subscribe('arduino', String, self.arduino_cb)
+        #rospy.Subscribe('shrimp', String, self.shrimp_cb)
+        #rospy.Subscribe('arduino', String, self.arduino_cb)
+        #rospy.Subscribe('odom', Odometry, self.odom_cb)
 
     def init_arduino(self):
         self.serial = serial.Serial('/dev/ttyUSB0', 9600)
@@ -45,7 +45,7 @@ class Controller:
             self.state['z'] = params[2]
             self.state['theta'] = params[3]
             self.logger.log_state(self.state)
-
+            '''
             print("")
             print("              x: %s" %self.state['x'])
             print("              y: %s" %self.state['y'])
@@ -53,7 +53,7 @@ class Controller:
             print("             ID: %s" %self.state['ID'])
             print("          theta: %s" %self.state['theta'])
             print("")
-
+            '''
         gps_frame = []
         for i in range(len(states)):
             state = states[i].replace('[', '')
@@ -126,9 +126,9 @@ class Controller:
         elif(action_id == 'i'):
             print("turnAndTravel")       ## Never called from here
         elif(action_id == 'j'):
-            print('free')
+            print('laneSwitch')          ## Never called from here
         elif(action_id == 'k'):
-            print("free")
+            print("intersection")        ## Never called from here
         elif(action_id == 'l'):
             print("free")
         elif(action_id == 'm'):

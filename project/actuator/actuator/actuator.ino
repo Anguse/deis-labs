@@ -5,9 +5,11 @@
 #define ECHO_PIN 13
 
 // Internal
-#define ACTION_SET_SPEED 103
-#define ACTION_SET_MODE  104
-#define ACTION_TURN_TRAVEL 105
+#define ACTION_SET_SPEED 103      //'g'
+#define ACTION_SET_MODE  104      //'h'
+#define ACTION_TURN_TRAVEL 105    //'i'
+#define ACTION_LANE_SWITCH 106    //'j'
+#define ACTION_INTERSECTION 107   //'k'
 
 #define LINE_FOLLOWING   0
 #define LISTENING        1
@@ -125,7 +127,7 @@ void loop(){
   char arduino_msg[32];
   sprintf(arduino_msg,"%d,%f,%f,%lu\n", busy, lWheelDist,rWheelDist, sonic);
   // Write something to serial
-  Serial.write(arduino_msg);
+  Serial.print(arduino_msg);
   if(newData){
     serialDataAction = receivedChars[0];
     if(serialDataAction == ACTION_SET_SPEED && mode != LINE_FOLLOWING){
@@ -149,7 +151,10 @@ void loop(){
       // Calculate trajectory
       // Travel
       busy = 1;
-    }else if(serialDataAction == ACTION_SET_MODE){
+    }else if(serialDataAction == ACTION_SWITCH_LANE){
+      
+    }
+    else if(serialDataAction == ACTION_SET_MODE){
 	    serialDataMode = receivedChars[1];
 	    mode = serialDataMode-'0';
     }
