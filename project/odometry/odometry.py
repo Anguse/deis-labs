@@ -14,7 +14,6 @@ if __name__ == "__main__":
     rospy.init_node('odometry', anonymous=True)
     odom_pub = rospy.Publisher('odom', Odometry, queue_size=10)
     odom_broadcaster = tf.TransformBroadcaster()
-    serial = serial.Serial('/dev/ttyUSB0', 9600)
 
     x = 0.0
     y = 0.0
@@ -29,13 +28,6 @@ if __name__ == "__main__":
 
     r = rospy.Rate(1.0)
     while not rospy.is_shutdown():
-        arduino_data = serial.read_until('\n')
-        params = arduino_data.split(',')
-        if len(params) > 2:
-            busy = params[0]
-            left_enc = params[1]
-            right_enc = params[2]
-            ult_sonic = params[3][:-1]
         current_time = rospy.Time.now()
 
         # compute odometry in a typical way given the velocities of the robot

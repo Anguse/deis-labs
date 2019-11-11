@@ -27,8 +27,8 @@ class Controller:
         rospy.Subscriber('action', String, self.action_cb)
         rospy.Subscriber('heartbeat', String, self.heartbeat_cb)
         rospy.Subscriber('feedback', String, self.feedback_cb)
-        #rospy.Subscribe('shrimp', String, self.shrimp_cb)
-        #rospy.Subscribe('arduino', String, self.arduino_cb)
+        rospy.Subscriber('arduino', String, self.arduino_cb)
+        rospy.Subscriber('shrimp', String, self.shrimp_cb)
         #rospy.Subscribe('odom', Odometry, self.odom_cb)
 
     def init_arduino(self):
@@ -69,7 +69,7 @@ class Controller:
         target_robot_id = int(params[4])
         msg = params[5]
 
-        if target_robot_id != self.state['ID']:
+        if target_robot_id != self.state['ID'] and source_robot_id != -1:
             print('action msg to another id')
             return
 
@@ -113,7 +113,8 @@ class Controller:
             endMarker = '\n'
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             if self.serial:
-                self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
+                self.serial.write((action_id+str(leftWheelSpeed)+str(rightWheelSpeed)+'\n').encode())
+                #self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
         elif(action_id == 'h'):
             print("setMode")
             payload_params = msg
@@ -121,7 +122,8 @@ class Controller:
             endMarker = '\n'
             self.state['mode'] = newMode
             if self.serial:
-                self.serial.write(chr(action_id)+chr(newMode)+endMarker)
+                self.serial.write((action_id+str(newMode)+'\n').encode())
+                #self.serial.write(chr(action_id)+chr(newMode)+endMarker)
             mode = newMode
         elif(action_id == 'i'):
             print("turnAndTravel")       ## Never called from here
@@ -150,7 +152,8 @@ class Controller:
             endMarker = '\n'
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             if self.serial:
-                self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
+                self.serial.write((action_id+str(leftWheelSpeed)+str(rightWheelSpeed)+'\n').encode())
+                #self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
         elif(action_id == 'q'):
             print("specialRequest")
         elif(action_id == 'r'):
@@ -189,21 +192,26 @@ class Controller:
         rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
     
     def shrimp_cb(self, data):
+        print(data)
         params = data.data.split(',')
-        timestamp = shrimp_pos[0]
-        x = shrimp_pos[1]
-        y = shrimp_pos[2]
+        timestamp = params[0]
+        x = int(params[1])
+        y = int(params[2])
         dx = x - self.state['x']
         dy = y - self.state['y']
         if abs(dx) < 5 or abs(dy) < 5 or self.state['mode'] != SHRIMP_FOLLOWING_MODE or self.busy:
             return
         dist = sqrt(pow(dx,2)+pow(dy,2))
         direction = atan2(dx,dy)
+        print("")
+        print("         distance: %f" %float(dist))
+        print("        direction: %f" %float(direction))
         if self.serial:
             # turn and travel
             speed = 50
             action_id = 'i'
-            self.serial.write(action_id+chr(self.state['theta'])+chr(direction)+chr(dist)+chr(speed)+endMarker)
+            self.serial.write((action_id+str(self.state['theta'])+','+str(direction)+str(dist)+str(speed)+'\n').encode())
+            #self.serial.write(action_id+chr(self.state['theta'])+chr(direction)+chr(dist)+chr(speed)+endMarker)
             self.busy = True
 
     def odom_cb(self, data):
@@ -215,15 +223,18 @@ class Controller:
         left_enc = params[1]
         right_enc = params[2]
         ult_sonic = params[3]
-        self.busy = bool(busy)
+        try:
+            self.busy = bool(int(busy))
+        except ValueError:
+            pass
 
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
     init_state = {
         'ID':0, 
         'platoon':-1, 
-        'platoon_pos':1, 
-        'type':-1, 'lane':-1, 
+        'platoon_pos':1,
+        'type':-1, 'lane':-1,
         'role':None, 
         'mode':0,
         'speed':(0,0), 
@@ -233,7 +244,7 @@ if __name__ == "__main__":
         'theta':0
         }
     ctrl = Controller(init_state)
-    #ctrl.init_arduino()
+    ctrl.init_arduino()
 
     r = rospy.Rate(1)
     while not rospy.is_shutdown():

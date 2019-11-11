@@ -109,11 +109,6 @@ void driveDistance(float distance, int motorPower)
   motors.brake();
 }
 
-typedef union {
- float floatingPoint;
- byte binary[4];
-} binaryFloat;
-
 void loop(){
   recvWithEndMarker();
   long lCount = encoder.getTicks(LEFT);
@@ -125,9 +120,9 @@ void loop(){
   lWheelDist = 5.0;
   rWheelDist = 5.0;
   char arduino_msg[32];
-  sprintf(arduino_msg,"%d,%f,%f,%lu\n", busy, lWheelDist,rWheelDist, sonic);
+  sprintf(arduino_msg,"%d,%f,%f,%lu\n", busy, lWheelDist, rWheelDist, sonic);
   // Write something to serial
-  Serial.print(arduino_msg);
+  Serial.print(String(busy)+","+String(lWheelDist)+","+String(rWheelDist)+","+String(sonic)+",\n");
   if(newData){
     serialDataAction = receivedChars[0];
     if(serialDataAction == ACTION_SET_SPEED && mode != LINE_FOLLOWING){
@@ -151,7 +146,7 @@ void loop(){
       // Calculate trajectory
       // Travel
       busy = 1;
-    }else if(serialDataAction == ACTION_SWITCH_LANE){
+    }else if(serialDataAction == ACTION_LANE_SWITCH){
       
     }
     else if(serialDataAction == ACTION_SET_MODE){
