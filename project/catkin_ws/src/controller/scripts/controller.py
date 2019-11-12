@@ -27,9 +27,9 @@ class Controller:
         rospy.Subscriber('action', String, self.action_cb)
         rospy.Subscriber('heartbeat', String, self.heartbeat_cb)
         rospy.Subscriber('feedback', String, self.feedback_cb)
-        rospy.Subscriber('arduino', String, self.arduino_cb)
-        rospy.Subscriber('shrimp', String, self.shrimp_cb)
-        #rospy.Subscribe('odom', Odometry, self.odom_cb)
+        rospy.Subscriber('backstreet_arduino', String, self.arduino_cb)
+        rospy.Subscriber('backstreet_shrimp', String, self.shrimp_cb)
+        #rospy.Subscriber('backstreet_odom', Odometry, self.odom_cb)
 
     def init_arduino(self):
         self.serial = serial.Serial('/dev/ttyUSB0', 9600)

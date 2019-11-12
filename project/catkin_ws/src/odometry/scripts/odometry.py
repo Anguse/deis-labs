@@ -12,7 +12,7 @@ from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
 
 if __name__ == "__main__":
     rospy.init_node('odometry', anonymous=True)
-    odom_pub = rospy.Publisher('odom', Odometry, queue_size=10)
+    odom_pub = rospy.Publisher('backstreet_odom', Odometry, queue_size=10)
     odom_broadcaster = tf.TransformBroadcaster()
 
     x = 0.0

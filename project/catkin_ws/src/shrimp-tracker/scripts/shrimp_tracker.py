@@ -42,8 +42,8 @@ frameHeight = 750
 resizedFrame = (frameWidth,frameHeight)
 
 
-pub = rospy.Publisher('shrimp', String, queue_size = 10)
-rospy.init_node('talker', anonymous=True)
+rospy.init_node('tracker', anonymous=True)
+pub = rospy.Publisher('backstreet_shrimp', String, queue_size = 10)
 rate = rospy.Rate(10) # 10hz
 
 
