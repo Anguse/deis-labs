@@ -113,7 +113,7 @@ class Controller:
             endMarker = '\n'
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             if self.serial:
-                self.serial.write((action_id+str(leftWheelSpeed)+str(rightWheelSpeed)+'\n').encode())
+                self.serial.write((action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n').encode())
                 #self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
         elif(action_id == 'h'):
             print("setMode")
@@ -122,7 +122,7 @@ class Controller:
             endMarker = '\n'
             self.state['mode'] = newMode
             if self.serial:
-                self.serial.write((action_id+str(newMode)+'\n').encode())
+                self.serial.write((action_id+','+str(newMode)+'\n').encode())
                 #self.serial.write(chr(action_id)+chr(newMode)+endMarker)
             mode = newMode
         elif(action_id == 'i'):
@@ -152,7 +152,7 @@ class Controller:
             endMarker = '\n'
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             if self.serial:
-                self.serial.write((action_id+str(leftWheelSpeed)+str(rightWheelSpeed)+'\n').encode())
+                self.serial.write((action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n').encode())
                 #self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
         elif(action_id == 'q'):
             print("specialRequest")
@@ -210,7 +210,7 @@ class Controller:
             # turn and travel
             speed = 50
             action_id = 'i'
-            self.serial.write((action_id+str(self.state['theta'])+','+str(direction)+str(dist)+str(speed)+'\n').encode())
+            self.serial.write((action_id+','+str(self.state['theta'])+','+str(direction)+','+str(dist)+','+str(speed)+'\n').encode())
             #self.serial.write(action_id+chr(self.state['theta'])+chr(direction)+chr(dist)+chr(speed)+endMarker)
             self.busy = True
 
