@@ -35,15 +35,13 @@ else:
 # allow the camera or video file to warm up
 time.sleep(2.0)
 
-
 #To resize frame width, height
 frameWidth = 560
 frameHeight = 750
 resizedFrame = (frameWidth,frameHeight)
 
-
 rospy.init_node('tracker', anonymous=True)
-pub = rospy.Publisher('backstreet_shrimp', String, queue_size = 10)
+pub = rospy.Publisher('bigboy_shrimp', String, queue_size = 10)
 rate = rospy.Rate(10) # 10hz
 
 

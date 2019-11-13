@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 
-import serial
 import rospy
 import math
-from math import cos, sin, atan2, pi
+from math import cos, sin, atan2, pi, sqrt
 from logger import Logger
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
@@ -13,37 +12,44 @@ LINE_FOLLOWING_MODE   = 0
 LISTENING_MODE        = 1
 SHRIMP_FOLLOWING_MODE = 2
 
+INIT_ANGLE = 0.0
+
 class Controller:
     
-    def __init__(self, state):
+    def __init__(self, state, platoons):
         self.state = state
         self.logger = Logger()
-        self.serial = None 
         self.busy = False
+        self.platoons = platoons
         self.heartbeat_pub = rospy.Publisher('heartbeat', String, queue_size=10)
         self.feedback_pub = rospy.Publisher('feedback', String, queue_size=10)
         self.action_pub = rospy.Publisher('action', String, queue_size=10)
+        self.arduino_write_pub = rospy.Publisher('bigboy_arduino_write', String, queue_size=10)
         rospy.Subscriber('josefoutput', String, self.gps_cb)
         rospy.Subscriber('action', String, self.action_cb)
         rospy.Subscriber('heartbeat', String, self.heartbeat_cb)
         rospy.Subscriber('feedback', String, self.feedback_cb)
-        rospy.Subscriber('backstreet_arduino', String, self.arduino_cb)
-        rospy.Subscriber('backstreet_shrimp', String, self.shrimp_cb)
-        #rospy.Subscriber('backstreet_odom', Odometry, self.odom_cb)
+        rospy.Subscriber('bigboy_arduino_read', String, self.arduino_cb)
+        rospy.Subscriber('bigboy_shrimp', String, self.shrimp_cb)
+        rospy.Subscriber('bigboy_odom', String, self.odom_cb)
 
-    def init_arduino(self):
-        self.serial = serial.Serial('/dev/ttyUSB0', 9600)
-    
     def gps_cb(self,data):
         states = data.data.split(';')
         state = states[self.state['ID']].replace('[', '')
         params = state.split(' ')
+        map_center = {'x':302, 'y':417}
 
         if params[0] != str(-1) and params[1] != str(-1) and params[2] != str(-1) and params[4] != str(-1):
             self.state['x'] = params[0]
             self.state['y'] = params[1]
             self.state['z'] = params[2]
-            self.state['theta'] = params[3]
+
+            # Calculate polar coordinates
+            x = float(self.state['x']) - map_center['x']
+            y = float(self.state['y']) - map_center['y']
+            self.state['polar_angle'] = atan2(y,x)
+            self.state['polar_r'] = sqrt(pow(x,2)+pow(y,2))
+
             self.logger.log_state(self.state)
             '''
             print("")
@@ -55,10 +61,34 @@ class Controller:
             print("")
             '''
         gps_frame = []
-        for i in range(len(states)):
+        adjusted_speed = 0
+        for i in range(1,len(states)):
             state = states[i].replace('[', '')
+            params = state.split(' ')
+            x = float(params[0]) - map_center['x']
+            y = float(params[1]) - map_center['y']
+            polar_angle = atan2(y,x)
+            polar_r = sqrt(pow(x,2)+pow(y,2))
+            if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
+                print "diff polar r: %f" %abs(polar_r - self.state['polar_r'])
+                print "diff polar angle: %f" %abs(polar_angle - self.state['polar_angle'])
+                adjusted_speed = 50*abs(polar_angle - self.state['polar_angle'])/(pi/8)
+                break
+            if i in self.platoons[self.state['platoon']]['robots']:
+                robot_state = self.platoons[self.state['platoon']]['robot_states'][i]
+                robot_state['x'] = params[0]
+                robot_state['y'] = params[1]
+                robot_state['z'] = params[2]
+                robot_state['polar_angle'] = polar_angle
+                robot_state['polar_r'] = polar_r
             gps_frame.append(state)
-        self.logger.log_gps(gps_frame)
+        if adjusted_speed != 0:
+            leftWheelSpeed = adjusted_speed
+            rightWheelSpeed = adjusted_speed
+            self.arduino_write_pub.publish('g'+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
+            self.state['speed'] = (adjusted_speed,adjusted_speed)
+
+        #self.logger.log_gps(gps_frame)
 
     def action_cb(self,data):
         params = data.data.split(',')	
@@ -85,7 +115,7 @@ class Controller:
         if(action_id == 'a'):
             print("setPlatoon")
             self.state['platoon'] = int(msg)
-        elif(action_id == 'b'):
+        elif(action_id == 'b'): 
             print("setID")
             self.state['ID'] = int(msg)
         elif(action_id == 'c'):
@@ -93,6 +123,13 @@ class Controller:
             self.state['type'] = msg
         elif(action_id == 'd'):
             print("setLane")
+            newlane = msg
+            if self.state['lane'] < newlane:
+                # left
+                self.arduino_write_pub.publish(action_id+','+'1'+'\n')
+            elif self.state['lane'] > newlane:
+                # right
+                self.arduino_write_pub.publish(action_id+','+'0'+'\n')
             self.state['lane'] = int(msg)
         elif(action_id == 'e'):
             print("setRole")
@@ -105,30 +142,20 @@ class Controller:
             payload_params = msg.split(';')
             leftWheelSpeed = int(payload_params[0])
             rightWheelSpeed = int(payload_params[1])
-            # Add sign to byte to express negative values
-            if(leftWheelSpeed < 0):
-                leftWheelSpeed = -leftWheelSpeed+128
-            if(rightWheelSpeed < 0):
-                rightWheelSpeed = -rightWheelSpeed+128
-            endMarker = '\n'
+            self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
-            if self.serial:
-                self.serial.write((action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n').encode())
-                #self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
         elif(action_id == 'h'):
             print("setMode")
+            print(msg)
             payload_params = msg
-            newMode = int(msg[0])
+            newMode = int(msg)
             endMarker = '\n'
+            self.arduino_write_pub.publish(action_id+','+str(newMode)+'\n')
             self.state['mode'] = newMode
-            if self.serial:
-                self.serial.write((action_id+','+str(newMode)+'\n').encode())
-                #self.serial.write(chr(action_id)+chr(newMode)+endMarker)
-            mode = newMode
         elif(action_id == 'i'):
             print("turnAndTravel")       ## Never called from here
         elif(action_id == 'j'):
-            print('laneSwitch')          ## Never called from here
+            print('free')
         elif(action_id == 'k'):
             print("intersection")        ## Never called from here
         elif(action_id == 'l'):
@@ -144,16 +171,9 @@ class Controller:
             payload_params = msg.split(';')
             leftWheelSpeed = int(payload_params[0])
             rightWheelSpeed = int(payload_params[1])
-            # Add sign to byte to express negative values
-            if(leftWheelSpeed < 0):
-                leftWheelSpeed = -leftWheelSpeed+128
-            if(rightWheelSpeed < 0):
-                rightWheelSpeed = -rightWheelSpeed+128
             endMarker = '\n'
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
-            if self.serial:
-                self.serial.write((action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n').encode())
-                #self.serial.write(action_id+chr(leftWheelSpeed)+chr(rightWheelSpeed)+endMarker)
+            self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
         elif(action_id == 'q'):
             print("specialRequest")
         elif(action_id == 'r'):
@@ -185,8 +205,8 @@ class Controller:
         platoon_pos = int(params[5])
         pose = params[6].split(';')
         speed = params[7].split(';')
-        if robot_id != self.state['ID']:
-            rospy.loginfo(rospy.get_caller_id() + 'heartbeat %s', data.data)
+        if robot_id in platoons[self.state['platoon']]['robots'] and robot_id != self.state['ID']:
+            print "heartbeat from %i" %robot_id
 
     def feedback_cb(self,data):
         rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
@@ -197,28 +217,40 @@ class Controller:
         timestamp = params[0]
         x = int(params[1])
         y = int(params[2])
-        dx = x - self.state['x']
-        dy = y - self.state['y']
-        if abs(dx) < 5 or abs(dy) < 5 or self.state['mode'] != SHRIMP_FOLLOWING_MODE or self.busy:
-            return
-        dist = sqrt(pow(dx,2)+pow(dy,2))
-        direction = atan2(dx,dy)
-        print("")
-        print("         distance: %f" %float(dist))
-        print("        direction: %f" %float(direction))
-        if self.serial:
-            # turn and travel
-            speed = 50
-            action_id = 'i'
-            self.serial.write((action_id+','+str(self.state['theta'])+','+str(direction)+','+str(dist)+','+str(speed)+'\n').encode())
-            #self.serial.write(action_id+chr(self.state['theta'])+chr(direction)+chr(dist)+chr(speed)+endMarker)
-            self.busy = True
+        if self.state['mode'] == SHRIMP_FOLLOWING_MODE:
+            if x > 210:
+                # Turn right
+                leftWheelSpeed = 50
+                rightWheelSpeed = 0
+                action_id = 'g'
+                self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
+                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
+            else:
+                # left
+                leftWheelSpeed = 0
+                rightWheelSpeed = 50
+                action_id = 'g'
+                self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
+                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
+        #dx = x - self.state['x']
+        #dy = y - self.state['y']
+        #if abs(dx) < 5 or abs(dy) < 5 or self.state['mode'] != SHRIMP_FOLLOWING_MODE or self.busy:
+        #    return
+        #dist = sqrt(pow(dx,2)+pow(dy,2))
+        #direction = atan2(dx,dy)
+        #print("")
+        #print("         distance: %f" %float(dist))
+        #print("        direction: %f" %float(direction))
+        # turn and travel
 
     def odom_cb(self, data):
-        rospy.loginfo(rospy.get_caller_id() + ' odom %s', data)
+        angle = float(data.data)
+        self.state['theta'] = INIT_ANGLE + float(data.data)
 
     def arduino_cb(self, data):
         params = data.data.split(',')
+        if len(params) < 4:
+            return
         busy = params[0]
         left_enc = params[1]
         right_enc = params[2]
@@ -230,23 +262,55 @@ class Controller:
 
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
-    init_state = {
-        'ID':0, 
-        'platoon':-1, 
+    tinyboy_state = {
+        'ID':1, 
+        'platoon':0, 
         'platoon_pos':1,
-        'type':-1, 'lane':-1,
+        'type':-1, 
+        'lane':0,
         'role':None, 
-        'mode':0,
-        'speed':(0,0), 
+        'mode':LISTENING_MODE,
+        'speed':(0,0),
         'x':0, 
         'y':0, 
         'z':0, 
-        'theta':0
-        }
-    ctrl = Controller(init_state)
-    ctrl.init_arduino()
+        'theta':INIT_ANGLE,
+        'polar_r':0.0,
+        'polar_angle':  0.0
+    }
+    bigboy_state = {
+        'ID':0, 
+        'platoon':0, 
+        'platoon_pos':2,
+        'type':-1, 
+        'lane':0,
+        'role':None, 
+        'mode':LISTENING_MODE,
+        'speed':(0,0),
+        'x':0, 
+        'y':0, 
+        'z':0, 
+        'theta':INIT_ANGLE,
+        'polar_r':0.0,
+        'polar_angle':  0.0
+    }
+    platoons = [
+            {
+            'ID':0,
+            'robots':[
+                0,
+                1
+            ],
+            'robot_states':[
+                bigboy_state,
+                tinyboy_state
+            ],
+            'leader':1
+            }
+    ]
+    ctrl = Controller(bigboy_state, platoons)
 
-    r = rospy.Rate(1)
+    r = rospy.Rate(20)
     while not rospy.is_shutdown():
         heartbeat_msg = str(rospy.get_time()) + ',' + \
                         str(ctrl.state['platoon']) + ',' + \
@@ -262,4 +326,5 @@ if __name__ == "__main__":
                         str(ctrl.state['speed'][1])
 
         ctrl.heartbeat_pub.publish(heartbeat_msg)
+
         r.sleep()
