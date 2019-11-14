@@ -11,7 +11,6 @@ except serial.SerialException:
     exit()
 
 def arduino_write_cb(data):
-    print("writing to arduino")
     arduino.write(data.data.encode())
 
 if __name__ == '__main__':
@@ -21,7 +20,6 @@ if __name__ == '__main__':
     r = rospy.Rate(20)
     while not rospy.is_shutdown():
         arduino_data = arduino.read_until('\n')
-        print(arduino_data)
         pub.publish(arduino_data[:-1])
         r.sleep()
         

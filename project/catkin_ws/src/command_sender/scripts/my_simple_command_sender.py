@@ -69,6 +69,11 @@ def main():
 			commandMsg = ""+ str(rospy.get_time()) + ",h,1,0,0,2"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
+		elif(key== '3'):
+			print "Pressed 3: mode 3"
+			commandMsg = ""+ str(rospy.get_time()) + ",h,1,0,0,3"
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
 
 		elif(key== 'i'):
 			# Turn and travel

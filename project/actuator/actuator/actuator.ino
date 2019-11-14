@@ -175,7 +175,8 @@ void loop() {
       leftSpeed = 0;
       rightSpeed = SPEED;
     }
-    else {
+    else
+    {
       leftSpeed = 0;
       rightSpeed = 0;
     }

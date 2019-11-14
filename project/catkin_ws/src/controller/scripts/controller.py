@@ -71,11 +71,6 @@ class Controller:
             y = float(params[1]) - map_center['y']
             polar_angle = atan2(y,x)
             polar_r = sqrt(pow(x,2)+pow(y,2))
-            if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
-                print "diff polar r: %f" %abs(polar_r - self.state['polar_r'])
-                print "diff polar angle: %f" %abs(polar_angle - self.state['polar_angle'])
-                adjusted_speed = 50*abs(polar_angle - self.state['polar_angle'])/(pi/8)
-                break
             if i in self.platoons[self.state['platoon']]['robots']:
                 robot_state = self.platoons[self.state['platoon']]['robot_states'][i]
                 robot_state['x'] = params[0]
@@ -83,13 +78,24 @@ class Controller:
                 robot_state['z'] = params[2]
                 robot_state['polar_angle'] = polar_angle
                 robot_state['polar_r'] = polar_r
+                ## Only supports 2 member platoon
+                if(self.state['mode'] == SIDE_FORMATION_MODE):
+                    if abs(polar_angle - self.state['polar_angle']) > pi/4:
+                        if(self.state['platoon_pos'] == 1):
+                            ## Wait for robot behind
+                            adjusted_speed = 50-50*abs(polar_angle - self.state['polar_angle'])/(pi)
+                            break
+                elif abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
+                    print "diff polar r: %f" %abs(polar_r - self.state['polar_r'])
+                    print "diff polar angle: %f" %abs(polar_angle - self.state['polar_angle'])
+                    adjusted_speed = 50*abs(polar_angle - self.state['polar_angle'])/(pi/8)
+                    break
             gps_frame.append(state)
         if adjusted_speed != 0:
             leftWheelSpeed = adjusted_speed
             rightWheelSpeed = adjusted_speed
             self.arduino_write_pub.publish('g'+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
             self.state['speed'] = (adjusted_speed,adjusted_speed)
-
         #self.logger.log_gps(gps_frame)
 
     def action_cb(self,data):
@@ -125,13 +131,16 @@ class Controller:
             self.state['type'] = msg
         elif(action_id == 'd'):
             print("setLane")
-            newlane = msg
+            switch_left = msg
+            self.arduino_write_pub.publish(action_id+','+switch_left+'\n')
+            '''
             if self.state['lane'] < newlane:
                 # left
                 self.arduino_write_pub.publish(action_id+','+'1'+'\n')
             elif self.state['lane'] > newlane:
                 # right
                 self.arduino_write_pub.publish(action_id+','+'0'+'\n')
+            '''
             self.state['lane'] = int(msg)
         elif(action_id == 'e'):
             print("setRole")
@@ -157,9 +166,9 @@ class Controller:
         elif(action_id == 'i'):
             print("turnAndTravel")       ## Never called from here
         elif(action_id == 'j'):
-            print('free')
-        elif(action_id == 'k'):
             print("intersection")        ## Never called from here
+        elif(action_id == 'k'):
+            print('free')
         elif(action_id == 'l'):
             print("free")
         elif(action_id == 'm'):
@@ -278,7 +287,7 @@ if __name__ == "__main__":
         'z':0, 
         'theta':INIT_ANGLE,
         'polar_r':0.0,
-        'polar_angle':  0.0
+        'polar_angle':0.0
     }
     bigboy_state = {
         'ID':0, 
@@ -293,7 +302,7 @@ if __name__ == "__main__":
         'y':0, 
         'z':0, 
         'theta':INIT_ANGLE,
-        'polar_r':0.0,
+        'polar_r':0.0,  
         'polar_angle':  0.0
     }
     platoons = [
