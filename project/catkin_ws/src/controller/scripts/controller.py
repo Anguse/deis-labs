@@ -11,12 +11,14 @@ from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
 LINE_FOLLOWING_MODE   = 0
 LISTENING_MODE        = 1
 SHRIMP_FOLLOWING_MODE = 2
+SIDE_FORMATION_MODE = 3
 
 INIT_ANGLE = 0.0
 
 class Controller:
     
     def __init__(self, state, platoons):
+
         self.state = state
         self.logger = Logger()
         self.busy = False
@@ -308,8 +310,7 @@ if __name__ == "__main__":
             'leader':1
             }
     ]
-    ctrl = Controller(bigboy_state, platoons)
-
+    ctrl = Controller(state=bigboy_state, platoons=platoons)
     r = rospy.Rate(20)
     while not rospy.is_shutdown():
         heartbeat_msg = str(rospy.get_time()) + ',' + \
