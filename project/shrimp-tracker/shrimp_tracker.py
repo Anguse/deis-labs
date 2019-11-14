@@ -4,7 +4,7 @@ from collections import deque
 from imutils.video import VideoStream
 import numpy as np
 import argparse
-import rospy
+#import rospy
 import cv2
 import imutils
 import time
@@ -42,12 +42,13 @@ frameHeight = 750
 resizedFrame = (frameWidth,frameHeight)
 
 
-pub = rospy.Publisher('shrimp', String, queue_size = 10)
-rospy.init_node('talker', anonymous=True)
-rate = rospy.Rate(10) # 10hz
+#pub = rospy.Publisher('shrimp', String, queue_size = 10)
+#rospy.init_node('talker', anonymous=True)
+#rate = rospy.Rate(1) # 1hz
 
 
 # keep looping
+#while not rospy.is_shutdown():
 while True:
 	# grab the current frame
 	frame = vs.read()
@@ -95,8 +96,8 @@ while True:
 		centroid_x = center[0]
 		centroid_y = abs(center[1]-frameHeight)
 		#Send timestamp,x,y to controller
-		pos_str = str(rospy.get_time())+','+str(centroid_x)+','+str(centroid_y)
-		pub.publish(pos_str)
+		#pos_str = str(rospy.get_time())+','+str(centroid_x)+','+str(centroid_y)
+		#pub.publish(pos_str)
 
 
 		# only proceed if the radius meets a minimum size
@@ -122,13 +123,13 @@ while True:
 		cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
 
 	# show the frame to our screen
-	#cv2.imshow("Frame", frame)
+	cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF
 
 	# if the 'q' key is pressed, stop the loop
 	if key == ord("q"):
 		break
-
+	#rate.sleep()
 # if we are not using a video file, stop the camera video stream
 if not args.get("video", False):
 	vs.stop()
