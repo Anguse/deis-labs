@@ -40,16 +40,11 @@ frameWidth = 560
 frameHeight = 750
 resizedFrame = (frameWidth,frameHeight)
 
-<<<<<<< HEAD:project/shrimp-tracker/shrimp_tracker.py
 
-#pub = rospy.Publisher('shrimp', String, queue_size = 10)
-#rospy.init_node('talker', anonymous=True)
-#rate = rospy.Rate(1) # 1hz
-=======
 rospy.init_node('tracker', anonymous=True)
 pub = rospy.Publisher('bigboy_shrimp', String, queue_size = 10)
 rate = rospy.Rate(10) # 10hz
->>>>>>> a7bed4007dbd7d3ba670eedfee09a5ef6b7ec976:project/catkin_ws/src/shrimp-tracker/scripts/shrimp_tracker.py
+
 
 
 # keep looping
