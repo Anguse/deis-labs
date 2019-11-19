@@ -80,10 +80,10 @@ class Controller:
                 robot_state['polar_r'] = polar_r
                 ## Only supports 2 member platoon
                 if(self.state['mode'] == SIDE_FORMATION_MODE):
-                    if abs(polar_angle - self.state['polar_angle']) > pi/4:
+                    if abs(polar_angle - self.state['polar_angle']) > pi/8:
                         if(self.state['platoon_pos'] == 1):
                             ## Wait for robot behind
-                            adjusted_speed = 50-50*abs(polar_angle - self.state['polar_angle'])/(pi)
+                            adjusted_speed = 25
                             break
                 elif abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
                     print "diff polar r: %f" %abs(polar_r - self.state['polar_r'])
@@ -221,7 +221,7 @@ class Controller:
 
     def feedback_cb(self,data):
         rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
-    
+
     def shrimp_cb(self, data):
         print(data)
         params = data.data.split(',')
@@ -273,6 +273,7 @@ class Controller:
 
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
+
     tinyboy_state = {
         'ID':1, 
         'platoon':0, 

@@ -55,22 +55,22 @@ def main():
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== '0'):
-			print "Pressed 0: mode 0"
+			print "Pressed 0: mode 0(LINE_FOLLOWING_MODE)"
 			commandMsg = ""+ str(rospy.get_time()) + ",h,1,0,0,0"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== '1'):
-			print "Pressed 1: mode 1"
+			print "Pressed 1: mode 1(LISTENING_MODE)"
 			commandMsg = ""+ str(rospy.get_time()) + ",h,1,0,0,1"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== '2'):
-			print "Pressed 2: mode 2"
+			print "Pressed 2: mode 2(SHRIMP_FOLLOWING_MODE)"
 			commandMsg = ""+ str(rospy.get_time()) + ",h,1,0,0,2"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== '3'):
-			print "Pressed 3: mode 3"
+			print "Pressed 3: mode 3(SIDE_FORMATION_MODE)"
 			commandMsg = ""+ str(rospy.get_time()) + ",h,1,0,0,3"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
