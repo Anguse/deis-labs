@@ -1,0 +1,5 @@
+<launch>
+  <node name="serial_comm" pkg="serial_comm" type="serial_comm.py"/>
+  <node name="odometry" pkg="odometry" type="odometry.py"/>
+  <node name="controller" pkg="controller" type="controller.py" output="screen"/>
+</launch>

@@ -11,9 +11,23 @@ from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
 LINE_FOLLOWING_MODE   = 0
 LISTENING_MODE        = 1
 SHRIMP_FOLLOWING_MODE = 2
-SIDE_FORMATION_MODE = 3
+SIDE_FORMATION_MODE   = 3
 
-INIT_ANGLE = 0.0
+OUTSIDE_BOUNDARY = 98
+OUTER_LANE_BOUNDARY = 76
+INNER_LANE_BOUNDARY = 55
+
+INIT_ANGLE    = 0.0
+DEFAULT_SPEED = 50
+
+# 2. Side formation needs testing, leader now updates the speed
+#    to half of default speed when follower is behind. 
+# 3. Speed is updated according to state['speed'] every heartbeat as long as the arduino is not busy
+# 4. Tries to switch to the other lane if its in the same lane as follower. Initially both are in 0(inner)
+
+#TODO: add side formation mode in robot. Remove hardcoded case from action cb
+#      check why the communication to the arduino is so bad
+#      change time on raspberry
 
 class Controller:
     
@@ -22,6 +36,7 @@ class Controller:
         self.state = state
         self.logger = Logger()
         self.busy = False
+        self.breaking = False
         self.platoons = platoons
         self.heartbeat_pub = rospy.Publisher('heartbeat', String, queue_size=10)
         self.feedback_pub = rospy.Publisher('feedback', String, queue_size=10)
@@ -51,7 +66,6 @@ class Controller:
             y = float(self.state['y']) - map_center['y']
             self.state['polar_angle'] = atan2(y,x)
             self.state['polar_r'] = sqrt(pow(x,2)+pow(y,2))
-
             self.logger.log_state(self.state)
             '''
             print("")
@@ -78,24 +92,44 @@ class Controller:
                 robot_state['z'] = params[2]
                 robot_state['polar_angle'] = polar_angle
                 robot_state['polar_r'] = polar_r
+                
                 ## Only supports 2 member platoon
                 if(self.state['mode'] == SIDE_FORMATION_MODE):
-                    if abs(polar_angle - self.state['polar_angle']) > pi/8:
-                        if(self.state['platoon_pos'] == 1):
+                    if self.state['platoon_pos'] == 1:
+                        if self.state['lane'] == robot_state['lane'] and not self.busy:
+                            if self.state['lane'] == 0:
+                                # Shift to left lane
+                                self.arduino_write_pub.publish('d'+','+'1'+'\n')
+                                self.state['lane'] = 1
+                            else:
+                                # Shift to right lane
+                                self.arduino_write_pub.publish('d'+','+'0'+'\n')
+                                self.state['lane'] = 0
+                        elif abs(polar_angle - self.state['polar_angle']) > pi/8:
                             ## Wait for robot behind
-                            adjusted_speed = 25
-                            break
-                elif abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
-                    print "diff polar r: %f" %abs(polar_r - self.state['polar_r'])
-                    print "diff polar angle: %f" %abs(polar_angle - self.state['polar_angle'])
-                    adjusted_speed = 50*abs(polar_angle - self.state['polar_angle'])/(pi/8)
-                    break
+                            adjusted_speed = DEFAULT_SPEED/2
+                            self.breaking = True
+                        elif self.breaking:
+                            adjusted_speed = DEFAULT_SPEED
+                            self.breaking = False
+                    elif self.breaking: 
+                        adjusted_speed = DEFAULT_SPEED
+                        self.breaking = False
+                elif(self.state['mode'] == LINE_FOLLOWING_MODE):
+                    if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
+                        adjusted_speed = DEFAULT_SPEED*abs(polar_angle - self.state['polar_angle'])/(pi/8)
+                        self.breaking = True
+                    elif self.breaking:
+                        adjusted_speed = DEFAULT_SPEED
+                        self.breaking = False
             gps_frame.append(state)
-        if adjusted_speed != 0:
-            leftWheelSpeed = adjusted_speed
-            rightWheelSpeed = adjusted_speed
-            self.arduino_write_pub.publish('g'+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
-            self.state['speed'] = (adjusted_speed,adjusted_speed)
+            if adjusted_speed != 0:
+                print("adjusted speed")
+                leftWheelSpeed = adjusted_speed
+                rightWheelSpeed = adjusted_speed
+                ctrl.arduino_write_pub.publish('g'+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
+                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
+                
         #self.logger.log_gps(gps_frame)
 
     def action_cb(self,data):
@@ -153,20 +187,21 @@ class Controller:
             payload_params = msg.split(';')
             leftWheelSpeed = int(payload_params[0])
             rightWheelSpeed = int(payload_params[1])
-            self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
+            self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
         elif(action_id == 'h'):
             print("setMode")
-            print(msg)
             payload_params = msg
             newMode = int(msg)
-            endMarker = '\n'
-            self.arduino_write_pub.publish(action_id+','+str(newMode)+'\n')
+            if(newMode == 3):
+                self.arduino_write_pub.publish(action_id+',0\n')
+            else:
+                self.arduino_write_pub.publish(action_id+','+str(newMode)+'\n')
             self.state['mode'] = newMode
         elif(action_id == 'i'):
-            print("turnAndTravel")       ## Never called from here
+            print("turnAndTravel")
         elif(action_id == 'j'):
-            print("intersection")        ## Never called from here
+            print("intersection")
         elif(action_id == 'k'):
             print('free')
         elif(action_id == 'l'):
@@ -277,7 +312,7 @@ if __name__ == "__main__":
     tinyboy_state = {
         'ID':1, 
         'platoon':0, 
-        'platoon_pos':1,
+        'platoon_pos':2,
         'type':-1, 
         'lane':0,
         'role':None, 
@@ -293,7 +328,7 @@ if __name__ == "__main__":
     bigboy_state = {
         'ID':0, 
         'platoon':0, 
-        'platoon_pos':2,
+        'platoon_pos':1,
         'type':-1, 
         'lane':0,
         'role':None, 
@@ -321,7 +356,7 @@ if __name__ == "__main__":
             }
     ]
     ctrl = Controller(state=bigboy_state, platoons=platoons)
-    r = rospy.Rate(20)
+    r = rospy.Rate(1)
     while not rospy.is_shutdown():
         heartbeat_msg = str(rospy.get_time()) + ',' + \
                         str(ctrl.state['platoon']) + ',' + \
@@ -335,7 +370,10 @@ if __name__ == "__main__":
                         str(ctrl.state['theta']) + ',' + \
                         str(ctrl.state['speed'][0]) + ';' + \
                         str(ctrl.state['speed'][1])
-
+        #if not ctrl.busy:
+        #    leftWheelSpeed = int(ctrl.state['speed'][0])
+        #    rightWheelSpeed = int(ctrl.state['speed'][1])
+        #    ctrl.arduino_write_pub.publish('g'+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
         ctrl.heartbeat_pub.publish(heartbeat_msg)
 
         r.sleep()
