@@ -217,7 +217,6 @@ class Controller:
             payload_params = msg.split(';')
             leftWheelSpeed = int(payload_params[0])
             rightWheelSpeed = int(payload_params[1])
-            endMarker = '\n'
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
         elif(action_id == 'q'):
