@@ -90,7 +90,7 @@ void setup(){
 }
 
 void loop(){
-  //updateOdom();
+  updateOdom();
   updateDist();
   updateIllu();
   nh.spinOnce();
@@ -138,8 +138,8 @@ void updateDist(){
 }
 
 void updateIllu(){
-  illu_left_msg.illuminance = left.read();
-  illu_right_msg.illuminance = right.read();
+  illu_left_msg.illuminance = left_outer.read();
+  illu_right_msg.illuminance = right_outer.read();
   illu_left_msg.header.stamp = nh.now();
   illu_right_msg.header.stamp = nh.now();
   pub_left.publish(&illu_left_msg);

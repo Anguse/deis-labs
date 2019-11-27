@@ -6,6 +6,7 @@ from math import cos, sin, atan2, pi, sqrt
 from std_msgs.msg import String, Int16
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
+from sensor_msgs.msg import Range, Illuminance
 
 LINE_FOLLOWING_MODE   = 0
 LISTENING_MODE        = 1
@@ -34,13 +35,20 @@ class Controller:
 
         self.state = state
         self.busy = False
-        self.breaking = False
+        self.break_applied = 0.0
         self.platoons = platoons
         self.heartbeat_pub = rospy.Publisher('heartbeat', String, queue_size=10)
         self.feedback_pub = rospy.Publisher('feedback', String, queue_size=10)
         self.action_pub = rospy.Publisher('action', String, queue_size=10)
-        self.leftWheel_pub = rospy.Publisher('bigboy/arduino/leftWheel', Int16, queue_size=10)
-        self.rightWheel_pub = rospy.Publisher('bigboy/arduino/rightWheel', Int16, queue_size=10)
+        self.leftWheel_pub = rospy.Publisher('bigboy/arduino/leftWheel', Int16, queue_size=-1)
+        self.rightWheel_pub = rospy.Publisher('bigboy/arduino/rightWheel', Int16, queue_size=-1)
+        self.left_ir = 0.0
+        self.right_ir = 0.0
+
+        rospy.Subscriber('bigboy/ultrasound', Range, self.ultrasound_cb)
+        rospy.Subscriber('bigboy/left', Illuminance, self.left_outer_cb)
+        rospy.Subscriber('bigboy/right', Illuminance, self.right_outer_cb)
+
         rospy.Subscriber('josefoutput', String, self.gps_cb)
         rospy.Subscriber('action', String, self.action_cb)
         rospy.Subscriber('heartbeat', String, self.heartbeat_cb)
@@ -65,15 +73,7 @@ class Controller:
             y = float(self.state['y']) - map_center['y']
             self.state['polar_angle'] = atan2(y,x)
             self.state['polar_r'] = sqrt(pow(x,2)+pow(y,2))
-            '''
-            print("")
-            print("              x: %s" %self.state['x'])
-            print("              y: %s" %self.state['y'])
-            print("              z: %s" %self.state['z'])
-            print("             ID: %s" %self.state['ID'])
-            print("          theta: %s" %self.state['theta'])
-            print("")
-            '''
+
         gps_frame = []
         adjusted_speed = 0
         for i in range(1,len(states)):
@@ -83,6 +83,8 @@ class Controller:
             y = float(params[1]) - map_center['y']
             polar_angle = atan2(y,x)
             polar_r = sqrt(pow(x,2)+pow(y,2))
+
+            ## Only avoid robots in platoon
             if i in self.platoons[self.state['platoon']]['robots']:
                 robot_state = self.platoons[self.state['platoon']]['robot_states'][i]
                 robot_state['x'] = params[0]
@@ -91,42 +93,32 @@ class Controller:
                 robot_state['polar_angle'] = polar_angle
                 robot_state['polar_r'] = polar_r
                 
-                ## Only supports 2 member platoon
                 if(self.state['mode'] == SIDE_FORMATION_MODE):
                     if self.state['platoon_pos'] == 1:
                         if self.state['lane'] == robot_state['lane'] and not self.busy:
                             if self.state['lane'] == 0:
                                 # Shift to left lane
-                                self.arduino_write_pub.publish('d'+','+'1'+'\n')
                                 self.state['lane'] = 1
                             else:
                                 # Shift to right lane
-                                self.arduino_write_pub.publish('d'+','+'0'+'\n')
                                 self.state['lane'] = 0
+                        # Break if leader and too far ahead
                         elif abs(polar_angle - self.state['polar_angle']) > pi/8:
                             ## Wait for robot behind
-                            adjusted_speed = DEFAULT_SPEED/2
-                            self.breaking = True
-                        elif self.breaking:
-                            adjusted_speed = DEFAULT_SPEED
-                            self.breaking = False
-                    elif self.breaking: 
-                        adjusted_speed = DEFAULT_SPEED
-                        self.breaking = False
+                            self.break_applied = .5
+                        elif self.break_applied != 0:
+                            self.break_applied = 0
                 elif(self.state['mode'] == LINE_FOLLOWING_MODE):
                     if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
-                        adjusted_speed = DEFAULT_SPEED*abs(polar_angle - self.state['polar_angle'])/(pi/8)
-                        self.breaking = True
-                    elif self.breaking:
-                        adjusted_speed = DEFAULT_SPEED
-                        self.breaking = False
+                        self.break_applied = abs(polar_angle - self.state['polar_angle'])/(pi/8)
+                    elif self.break_applied != 0:
+                        self.break_applied = 0
+                else:
+                    self.break_applied = 0
+            leftWheelSpeed = self.state['speed'][0] - self.state['speed'][0]*self.break_applied
+            rightWheelSpeed = self.state['speed'][1] - self.state['speed'][1]*self.break_applied
+            self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             gps_frame.append(state)
-            if adjusted_speed != 0:
-                print("adjusted speed")
-                leftWheelSpeed = adjusted_speed
-                rightWheelSpeed = adjusted_speed
-                ctrl.arduino_write_pub.publish('g'+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
-                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
                 
     def action_cb(self,data):
         params = data.data.split(',')	
@@ -161,41 +153,66 @@ class Controller:
             self.state['type'] = msg
         elif(action_id == 'd'):
             print("setLane")
-            switch_left = msg
-            self.arduino_write_pub.publish(action_id+','+switch_left+'\n')
-            '''
-            if self.state['lane'] < newlane:
-                # left
-                self.arduino_write_pub.publish(action_id+','+'1'+'\n')
-            elif self.state['lane'] > newlane:
-                # right
-                self.arduino_write_pub.publish(action_id+','+'0'+'\n')
-            '''
-            self.state['lane'] = int(msg)
+            newLane = int(msg)
+            rospy.loginfo("current lane:%i, new_lane:%i"%(self.state['lane'], newLane))
+            if self.state['lane'] < newLane:
+                self.busy = True
+                # stop
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(0)
+                # switch left
+                self.rightWheel_pub.publish(50)
+                self.leftWheel_pub.publish(0)
+                rospy.sleep(1.5)
+                self.rightWheel_pub.publish(50)
+                self.leftWheel_pub.publish(50)
+                rospy.sleep(1.7)
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(50)
+                rospy.sleep(1)
+                self.busy = False
+            elif self.state['lane'] > newLane:
+                self.busy = True
+                # stop
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(0)
+                # switch right
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(50)
+                rospy.sleep(1.5)
+                self.rightWheel_pub.publish(50)
+                self.leftWheel_pub.publish(50)
+                rospy.sleep(1.7)
+                self.rightWheel_pub.publish(50)
+                self.leftWheel_pub.publish(0)
+                rospy.sleep(1)
+                self.busy = False
+            else:
+                rospy.loginfo("already in lane %i"%newLane)
+            self.state['lane'] = newLane
         elif(action_id == 'e'):
             print("setRole")
             self.state['role'] = msg
         elif(action_id == 'f'):
             print("setPosition")
-            # This doesnt make any sense
         elif(action_id == 'g'):
-            print("setSpeed")
-            payload_params = msg.split(';')
-            leftWheelSpeed = int(payload_params[0])
-            rightWheelSpeed = int(payload_params[1])
-            self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
-            #self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
-            self.leftWheel_pub.publish(leftWheelSpeed)
-            self.rightWheel_pub.publish(rightWheelSpeed)
+            if not self.busy:
+                rospy.loginfo("setSpeed %s"%msg)
+                payload_params = msg.split(';')
+                leftWheelSpeed = int(payload_params[0])
+                rightWheelSpeed = int(payload_params[1])
+                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
+                self.leftWheel_pub.publish(leftWheelSpeed)
+                self.rightWheel_pub.publish(rightWheelSpeed)
+            else:
+                rospy.loginfo("Busy, can't set speed now.")
         elif(action_id == 'h'):
             print("setMode")
             payload_params = msg
             newMode = int(msg)
-            if(newMode == 3):
-                self.arduino_write_pub.publish(action_id+',0\n')
-            else:
-                self.arduino_write_pub.publish(action_id+','+str(newMode)+'\n')
             self.state['mode'] = newMode
+            if newMode == LINE_FOLLOWING_MODE:
+                self.state['speed'] = (50,50)
         elif(action_id == 'i'):
             print("turnAndTravel")
         elif(action_id == 'j'):
@@ -211,12 +228,16 @@ class Controller:
         elif(action_id == 'o'):
             print("moveToPosition")
         elif(action_id == 'p'):
-            print("changeSpeed")
-            payload_params = msg.split(';')
-            leftWheelSpeed = int(payload_params[0])
-            rightWheelSpeed = int(payload_params[1])
-            self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
-            self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
+            if not self.busy:
+                rospy.loginfo("changeSpeed %s"%msg)
+                payload_params = msg.split(';')
+                leftWheelSpeed = int(payload_params[0])
+                rightWheelSpeed = int(payload_params[1])
+                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
+                self.leftWheel_pub.publish(leftWheelSpeed)
+                self.rightWheel_pub.publish(rightWheelSpeed)
+            else:
+                rospy.loginfo("Busy, can't set speed now.")
         elif(action_id == 'q'):
             print("specialRequest")
         elif(action_id == 'r'):
@@ -303,6 +324,17 @@ class Controller:
         except ValueError:
             pass
 
+    def ultrasound_cb(self, data):
+        rospy.logdebug(data.range)
+
+    def left_outer_cb(self, data):
+        rospy.logdebug(data.illuminance)
+        self.left_ir = data.illuminance
+    def right_outer_cb(self, data):
+        rospy.logdebug(data.illuminance)
+        self.right_ir = data.illuminance
+
+
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
 
@@ -353,8 +385,18 @@ if __name__ == "__main__":
             }
     ]
     ctrl = Controller(state=bigboy_state, platoons=platoons)
-    r = rospy.Rate(1)
+    r = rospy.Rate(20)
     while not rospy.is_shutdown():
+        if not ctrl.busy:
+            if ctrl.state['mode'] == LINE_FOLLOWING_MODE:
+                if ctrl.left_ir > 700 and ctrl.right_ir < 700:
+                    ctrl.rightWheel_pub.publish(0)
+                    rospy.sleep(.01)
+                if ctrl.right_ir > 700 and ctrl.left_ir < 700:
+                    ctrl.leftWheel_pub.publish(0)
+                    rospy.sleep(.01)
+            ctrl.leftWheel_pub.publish(int(ctrl.state['speed'][0]))
+            ctrl.rightWheel_pub.publish(int(ctrl.state['speed'][1]))
         heartbeat_msg = str(rospy.get_time()) + ',' + \
                         str(ctrl.state['platoon']) + ',' + \
                         str(ctrl.state['ID']) + ',' + \
@@ -367,10 +409,5 @@ if __name__ == "__main__":
                         str(ctrl.state['theta']) + ',' + \
                         str(ctrl.state['speed'][0]) + ';' + \
                         str(ctrl.state['speed'][1])
-        #if not ctrl.busy:
-        #    leftWheelSpeed = int(ctrl.state['speed'][0])
-        #    rightWheelSpeed = int(ctrl.state['speed'][1])
-        #    ctrl.arduino_write_pub.publish('g'+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
         ctrl.heartbeat_pub.publish(heartbeat_msg)
-
         r.sleep()
