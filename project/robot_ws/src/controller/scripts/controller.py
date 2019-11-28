@@ -43,11 +43,15 @@ class Controller:
         self.leftWheel_pub = rospy.Publisher('bigboy/arduino/leftWheel', Int16, queue_size=-1)
         self.rightWheel_pub = rospy.Publisher('bigboy/arduino/rightWheel', Int16, queue_size=-1)
         self.left_ir = 0.0
+        self.left_inner_ir = 0.0
         self.right_ir = 0.0
+        self.right_inner_ir = 0.0
 
         rospy.Subscriber('bigboy/ultrasound', Range, self.ultrasound_cb)
         rospy.Subscriber('bigboy/left', Illuminance, self.left_outer_cb)
+        rospy.Subscriber('bigboy/left_inner', Illuminance, self.left_inner_cb)
         rospy.Subscriber('bigboy/right', Illuminance, self.right_outer_cb)
+        rospy.Subscriber('bigboy/right_inner', Illuminance, self.right_inner_cb)
 
         rospy.Subscriber('josefoutput', String, self.gps_cb)
         rospy.Subscriber('action', String, self.action_cb)
@@ -330,9 +334,15 @@ class Controller:
     def left_outer_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.left_ir = data.illuminance
+    def left_inner_cb(self, data):
+        rospy.logdebug(data.illuminance)
+        self.left_inner_ir = data.illuminance
     def right_outer_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.right_ir = data.illuminance
+    def right_inner_cb(self, data):
+        rospy.logdebug(data.illuminance)
+        self.right_inner_ir = data.illuminance
 
 
 if __name__ == "__main__":
@@ -385,18 +395,25 @@ if __name__ == "__main__":
             }
     ]
     ctrl = Controller(state=bigboy_state, platoons=platoons)
-    r = rospy.Rate(20)
+    r = rospy.Rate(5)
     while not rospy.is_shutdown():
         if not ctrl.busy:
             if ctrl.state['mode'] == LINE_FOLLOWING_MODE:
-                if ctrl.left_ir > 700 and ctrl.right_ir < 700:
+                if ((ctrl.left_ir > 700 and ctrl.right_ir > 700) or (ctrl.left_ir < 700 and ctrl.right_ir < 700)) and not (ctrl.left_inner_ir > 700 and ctrl.right_inner_ir > 700):
+                    ctrl.leftWheel_pub.publish(50)
+                    ctrl.rightWheel_pub.publish(50)
+                elif ctrl.left_ir > 700 and ctrl.right_ir < 700:
                     ctrl.rightWheel_pub.publish(0)
-                    rospy.sleep(.01)
-                if ctrl.right_ir > 700 and ctrl.left_ir < 700:
+                    rospy.sleep(.05)
+                elif ctrl.right_ir > 700 and ctrl.left_ir < 700:
                     ctrl.leftWheel_pub.publish(0)
-                    rospy.sleep(.01)
-            ctrl.leftWheel_pub.publish(int(ctrl.state['speed'][0]))
-            ctrl.rightWheel_pub.publish(int(ctrl.state['speed'][1]))
+                    rospy.sleep(.05)
+                else:
+                    ctrl.leftWheel_pub.publish(0)
+                    ctrl.rightWheel_pub.publish(0)
+            else:
+                ctrl.leftWheel_pub.publish(int(ctrl.state['speed'][0]))
+                ctrl.rightWheel_pub.publish(int(ctrl.state['speed'][1]))
         heartbeat_msg = str(rospy.get_time()) + ',' + \
                         str(ctrl.state['platoon']) + ',' + \
                         str(ctrl.state['ID']) + ',' + \

@@ -41,8 +41,8 @@ RedBotEncoder encoder = RedBotEncoder(A2, A4);
  #include <WProgram.h>
 #endif
 
-geometry_msgs::TransformStamped t;
-tf::TransformBroadcaster broadcaster;
+//geometry_msgs::TransformStamped t;
+//tf::TransformBroadcaster broadcaster;
 ros::NodeHandle  nh;
 
 double x = 1.0;
@@ -57,27 +57,38 @@ void leftWheel_cb( const std_msgs::Int16& cmd_msg){
   motors.leftMotor(-cmd_msg.data);
 }
 void rightWheel_cb( const std_msgs::Int16& cmd_msg){
-  motors.rightMotor(cmd_msg.data);
+  if(cmd_msg.data > 0){
+    motors.rightMotor(cmd_msg.data+1);  
+  }else if(cmd_msg.data < 0){
+    motors.rightMotor(cmd_msg.data-1);  
+  }else{
+    motors.rightMotor(cmd_msg.data);
+  }
+  
 }
 
 sensor_msgs::Range range_msg;
-sensor_msgs::Illuminance illu_left_msg, illu_right_msg;
+sensor_msgs::Illuminance illu_left_msg, illu_right_msg, illu_left_inner_msg, illu_right_inner_msg;
 ros::Publisher pub_range( "bigboy/ultrasound", &range_msg);
 ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
 ros::Publisher pub_right( "bigboy/right", &illu_right_msg);
+ros::Publisher pub_left_inner( "bigboy/left_inner", &illu_left_inner_msg);
+ros::Publisher pub_right_inner( "bigboy/right_inner", &illu_right_inner_msg);
+
 ros::Subscriber<std_msgs::Int16> lw_sub("bigboy/arduino/leftWheel", leftWheel_cb);
 ros::Subscriber<std_msgs::Int16> rw_sub("bigboy/arduino/rightWheel", rightWheel_cb);
-
 
 void setup(){
   encoder.clearEnc(BOTH);
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   nh.initNode();
-  broadcaster.init(nh);
+  //broadcaster.init(nh);
   nh.advertise(pub_range);
   nh.advertise(pub_left);
   nh.advertise(pub_right);
+  nh.advertise(pub_left_inner);
+  nh.advertise(pub_right_inner);
   
   range_msg.radiation_type = sensor_msgs::Range::ULTRASOUND;
   range_msg.header.frame_id =  "/ultrasound";
@@ -90,13 +101,13 @@ void setup(){
 }
 
 void loop(){
-  updateOdom();
+  //updateOdom();
   updateDist();
   updateIllu();
   nh.spinOnce();
-  delay(1);
+  //delay(1);
 }
-
+/*
 void updateOdom(){
   // drive in a circle
   double dx = 0.2;
@@ -119,7 +130,7 @@ void updateOdom(){
   
   broadcaster.sendTransform(t);
 }
-
+*/
 void updateDist(){
   // trigger sensor
   digitalWrite(TRIG_PIN, LOW);
@@ -139,9 +150,15 @@ void updateDist(){
 
 void updateIllu(){
   illu_left_msg.illuminance = left_outer.read();
+  illu_left_inner_msg.illuminance = left.read();
   illu_right_msg.illuminance = right_outer.read();
+  illu_right_inner_msg.illuminance = right.read();
   illu_left_msg.header.stamp = nh.now();
+  illu_left_inner_msg.header.stamp = nh.now();
   illu_right_msg.header.stamp = nh.now();
+  illu_right_inner_msg.header.stamp = nh.now();
   pub_left.publish(&illu_left_msg);
+  pub_left_inner.publish(&illu_left_inner_msg);
   pub_right.publish(&illu_right_msg);
+  pub_right_inner.publish(&illu_right_inner_msg);
 }
