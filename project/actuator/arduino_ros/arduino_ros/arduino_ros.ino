@@ -58,9 +58,9 @@ void leftWheel_cb( const std_msgs::Int16& cmd_msg){
 }
 void rightWheel_cb( const std_msgs::Int16& cmd_msg){
   if(cmd_msg.data > 0){
-    motors.rightMotor(cmd_msg.data+1);  
+    motors.rightMotor(cmd_msg.data+3);  
   }else if(cmd_msg.data < 0){
-    motors.rightMotor(cmd_msg.data-1);  
+    motors.rightMotor(cmd_msg.data-3);  
   }else{
     motors.rightMotor(cmd_msg.data);
   }
@@ -102,7 +102,7 @@ void setup(){
 
 void loop(){
   //updateOdom();
-  updateDist();
+  //updateDist();
   updateIllu();
   nh.spinOnce();
   //delay(1);

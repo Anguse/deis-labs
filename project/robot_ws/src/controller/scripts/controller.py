@@ -20,6 +20,8 @@ INNER_LANE_BOUNDARY = 55
 INIT_ANGLE    = 0.0
 DEFAULT_SPEED = 50
 
+LINE_TRESHOLD = 700
+
 # 2. Side formation needs testing, leader now updates the speed
 #    to half of default speed when follower is behind. 
 # 3. Speed is updated according to state['speed'] every heartbeat as long as the arduino is not busy
@@ -395,19 +397,19 @@ if __name__ == "__main__":
             }
     ]
     ctrl = Controller(state=bigboy_state, platoons=platoons)
-    r = rospy.Rate(5)
+    r = rospy.Rate(20)
     while not rospy.is_shutdown():
         if not ctrl.busy:
             if ctrl.state['mode'] == LINE_FOLLOWING_MODE:
-                if ((ctrl.left_ir > 700 and ctrl.right_ir > 700) or (ctrl.left_ir < 700 and ctrl.right_ir < 700)) and not (ctrl.left_inner_ir > 700 and ctrl.right_inner_ir > 700):
-                    ctrl.leftWheel_pub.publish(50)
-                    ctrl.rightWheel_pub.publish(50)
-                elif ctrl.left_ir > 700 and ctrl.right_ir < 700:
-                    ctrl.rightWheel_pub.publish(0)
-                    rospy.sleep(.05)
-                elif ctrl.right_ir > 700 and ctrl.left_ir < 700:
-                    ctrl.leftWheel_pub.publish(0)
-                    rospy.sleep(.05)
+                if ((ctrl.left_ir > LINE_TRESHOLD and ctrl.right_ir > LINE_TRESHOLD) or (ctrl.left_ir < LINE_TRESHOLD and ctrl.right_ir < LINE_TRESHOLD)) and not (ctrl.left_inner_ir > LINE_TRESHOLD and ctrl.right_inner_ir > LINE_TRESHOLD):
+                    ctrl.leftWheel_pub.publish(40)
+                    ctrl.rightWheel_pub.publish(40)
+                elif ctrl.left_ir > 400 and ctrl.right_ir < LINE_TRESHOLD:
+                    ctrl.rightWheel_pub.publish(10)
+                    rospy.sleep(.01)
+                elif ctrl.right_ir > 400 and ctrl.left_ir < LINE_TRESHOLD:
+                    ctrl.leftWheel_pub.publish(10)
+                    rospy.sleep(.01)
                 else:
                     ctrl.leftWheel_pub.publish(0)
                     ctrl.rightWheel_pub.publish(0)
