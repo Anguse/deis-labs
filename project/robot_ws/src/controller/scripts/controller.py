@@ -402,14 +402,16 @@ if __name__ == "__main__":
         if not ctrl.busy:
             if ctrl.state['mode'] == LINE_FOLLOWING_MODE:
                 if ((ctrl.left_ir > LINE_TRESHOLD and ctrl.right_ir > LINE_TRESHOLD) or (ctrl.left_ir < LINE_TRESHOLD and ctrl.right_ir < LINE_TRESHOLD)) and not (ctrl.left_inner_ir > LINE_TRESHOLD and ctrl.right_inner_ir > LINE_TRESHOLD):
-                    ctrl.leftWheel_pub.publish(40)
-                    ctrl.rightWheel_pub.publish(40)
+                    ctrl.leftWheel_pub.publish(60)
+                    ctrl.rightWheel_pub.publish(60)
                 elif ctrl.left_ir > 400 and ctrl.right_ir < LINE_TRESHOLD:
-                    ctrl.rightWheel_pub.publish(10)
-                    rospy.sleep(.01)
+                    ctrl.rightWheel_pub.publish(5)
+                    rospy.sleep(.02)
+                    ctrl.rightWheel_pub.publish(50)
                 elif ctrl.right_ir > 400 and ctrl.left_ir < LINE_TRESHOLD:
-                    ctrl.leftWheel_pub.publish(10)
-                    rospy.sleep(.01)
+                    ctrl.leftWheel_pub.publish(5)
+                    rospy.sleep(.02)
+                    ctrl.leftWheel_pub.publish(50)
                 else:
                     ctrl.leftWheel_pub.publish(0)
                     ctrl.rightWheel_pub.publish(0)
