@@ -85,7 +85,6 @@ std_msgs::Int16 linefollow_msg;
 //ros::Publisher pub_range( "bigboy/ultrasound", &range_msg);
 ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
 ros::Publisher pub_right( "bigboy/right", &illu_right_msg);
-ros::Publisher pub_linefollow( "bigboy/linefollow", &linefollow_msg);
 //ros::Publisher pub_left_inner( "bigboy/left_inner", &illu_left_inner_msg);
 //ros::Publisher pub_right_inner( "bigboy/right_inner", &illu_right_inner_msg);
 

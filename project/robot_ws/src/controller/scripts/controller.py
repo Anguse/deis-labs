@@ -44,6 +44,8 @@ class Controller:
         self.action_pub = rospy.Publisher('action', String, queue_size=10)
         self.leftWheel_pub = rospy.Publisher('bigboy/arduino/leftWheel', Int16, queue_size=-1)
         self.rightWheel_pub = rospy.Publisher('bigboy/arduino/rightWheel', Int16, queue_size=-1)
+        self.lineFollow_pub = rospy.Publisher('bigboy/arduino/linefollow', Int16, queue_size=-1)
+
         self.left_ir = 0.0
         self.left_inner_ir = 0.0
         self.right_ir = 0.0
@@ -162,6 +164,8 @@ class Controller:
             newLane = int(msg)
             rospy.loginfo("current lane:%i, new_lane:%i"%(self.state['lane'], newLane))
             if self.state['lane'] < newLane:
+                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
+                    self.lineFollow_pub.publish(-1)
                 self.busy = True
                 # stop
                 self.rightWheel_pub.publish(0)
@@ -177,7 +181,11 @@ class Controller:
                 self.leftWheel_pub.publish(50)
                 rospy.sleep(1)
                 self.busy = False
+                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
+                    self.lineFollow_pub.publish(50)
             elif self.state['lane'] > newLane:
+                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
+                    self.lineFollow_pub.publish(-1)
                 self.busy = True
                 # stop
                 self.rightWheel_pub.publish(0)
@@ -193,6 +201,8 @@ class Controller:
                 self.leftWheel_pub.publish(0)
                 rospy.sleep(1)
                 self.busy = False
+                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
+                    self.lineFollow_pub.publish(50)
             else:
                 rospy.loginfo("already in lane %i"%newLane)
             self.state['lane'] = newLane
@@ -218,6 +228,7 @@ class Controller:
             newMode = int(msg)
             self.state['mode'] = newMode
             if newMode == LINE_FOLLOWING_MODE:
+                self.lineFollow_pub.publish(50)
                 self.state['speed'] = (50,50)
         elif(action_id == 'i'):
             print("turnAndTravel")
@@ -336,12 +347,15 @@ class Controller:
     def left_outer_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.left_ir = data.illuminance
+    
     def left_inner_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.left_inner_ir = data.illuminance
+    
     def right_outer_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.right_ir = data.illuminance
+    
     def right_inner_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.right_inner_ir = data.illuminance
@@ -400,20 +414,8 @@ if __name__ == "__main__":
     r = rospy.Rate(20)
     while not rospy.is_shutdown():
         if not ctrl.busy:
-            if ctrl.state['mode'] == LINE_FOLLOWING_MODE:
-                if ((ctrl.left_ir > LINE_TRESHOLD and ctrl.right_ir > LINE_TRESHOLD) or (ctrl.left_ir < LINE_TRESHOLD and ctrl.right_ir < LINE_TRESHOLD)) and not (ctrl.left_inner_ir > LINE_TRESHOLD and ctrl.right_inner_ir > LINE_TRESHOLD):
-                    ctrl.leftWheel_pub.publish(60)
-                    ctrl.rightWheel_pub.publish(60)
-                elif ctrl.left_ir > LINE_TRESHOLD and ctrl.right_ir < LINE_TRESHOLD:
-                    ctrl.rightWheel_pub.publish(5)
-                    rospy.sleep(.02)
-                elif ctrl.right_ir > LINE_TRESHOLD and ctrl.left_ir < LINE_TRESHOLD:
-                    ctrl.leftWheel_pub.publish(5)
-                    rospy.sleep(.02)
-                    ctrl.leftWheel_pub.publish(50)
-                else:
-                    ctrl.leftWheel_pub.publish(0)
-                    ctrl.rightWheel_pub.publish(0)
+            if ctrl.state['mode'] == LINE_FOLLOWING_MODE or ctrl.state['mode'] == SIDE_FORMATION_MODE:
+                ctrl.lineFollow_pub.publish(int(ctrl.state['speed'][0]))
             else:
                 ctrl.leftWheel_pub.publish(int(ctrl.state['speed'][0]))
                 ctrl.rightWheel_pub.publish(int(ctrl.state['speed'][1]))
