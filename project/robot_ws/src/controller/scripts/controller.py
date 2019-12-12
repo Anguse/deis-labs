@@ -42,9 +42,10 @@ class Controller:
         self.heartbeat_pub = rospy.Publisher('heartbeat', String, queue_size=10)
         self.feedback_pub = rospy.Publisher('feedback', String, queue_size=10)
         self.action_pub = rospy.Publisher('action', String, queue_size=10)
-        self.leftWheel_pub = rospy.Publisher(robot+'/arduino/leftWheel', Int16, queue_size=-1)
-        self.rightWheel_pub = rospy.Publisher(robot+'/arduino/rightWheel', Int16, queue_size=-1)
-        self.lineFollow_pub = rospy.Publisher(robot+'/arduino/linefollow', Int16, queue_size=-1)
+        self.leftWheel_pub = rospy.Publisher(robot+'/arduino/leftWheel', Int16, queue_size=10)
+        self.rightWheel_pub = rospy.Publisher(robot+'/arduino/rightWheel', Int16, queue_size=10)
+        self.lineFollow_pub = rospy.Publisher(robot+'/arduino/linefollow', Int16, queue_size=10)
+        self.laneSwitch_pub = rospy.Publisher(robot+'/arduino/laneswitch', Int16, queue_size=10)
 
         self.left_ir = 0.0
         self.left_inner_ir = 0.0
@@ -65,18 +66,27 @@ class Controller:
         rospy.Subscriber('feedback', String, self.feedback_cb)
         rospy.Subscriber(robot+'_arduino_read', String, self.arduino_cb)
         rospy.Subscriber(robot+'_shrimp', String, self.shrimp_cb)
-        rospy.Subscriber(robot+'_odom', String, self.odom_cb)
 
     def gps_cb(self,data):
         states = data.data.split(';')
-        state = states[self.state['ID']].replace('[', '')
-        params = state.split(' ')
+        nose_state_params = states[1].replace('[', '').split(' ')
+        tail_state_params = states[0].replace('[', '').split(' ')
+
+        # Calculate pose
+        dx = float(nose_state_params[0]) - float(tail_state_params[0])
+        dy = float(nose_state_params[1]) - float(tail_state_params[1])
+        self.state['theta'] = atan2(dy,dx)
+        
+
+        params = tail_state_params
         map_center = {'x':302, 'y':417}
 
         if params[0] != str(-1) and params[1] != str(-1) and params[2] != str(-1) and params[4] != str(-1):
             self.state['x'] = params[0]
             self.state['y'] = params[1]
-            self.state['z'] = params[2]
+            # angle = params[2]
+            # id_digit = params[3]
+            # certainty = params[4]
 
             # Calculate polar coordinates
             x = float(self.state['x']) - map_center['x']
@@ -86,7 +96,7 @@ class Controller:
 
         gps_frame = []
         adjusted_speed = 0
-        for i in range(1,len(states)):
+        for i in range(2,len(states)):
             state = states[i].replace('[', '')
             params = state.split(' ')
             x = float(params[0]) - map_center['x']
@@ -168,40 +178,42 @@ class Controller:
             if self.state['lane'] < newLane:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(-1)
+                #self.laneSwitch_pub.publish(1)
                 self.busy = True
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
                 # switch left
-                self.rightWheel_pub.publish(50)
+                self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(0)
-                rospy.sleep(1.5)
-                self.rightWheel_pub.publish(50)
-                self.leftWheel_pub.publish(50)
-                rospy.sleep(1.7)
-                self.rightWheel_pub.publish(0)
-                self.leftWheel_pub.publish(50)
+                rospy.sleep(.59)
+                self.rightWheel_pub.publish(80)
+                self.leftWheel_pub.publish(80)
                 rospy.sleep(1)
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(80)
+                rospy.sleep(.59)
                 self.busy = False
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(50)
             elif self.state['lane'] > newLane:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(-1)
+                #self.laneSwitch_pub.publish(0)
                 self.busy = True
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
                 # switch right
                 self.rightWheel_pub.publish(0)
-                self.leftWheel_pub.publish(50)
-                rospy.sleep(1.5)
-                self.rightWheel_pub.publish(50)
-                self.leftWheel_pub.publish(50)
-                rospy.sleep(1.7)
-                self.rightWheel_pub.publish(50)
-                self.leftWheel_pub.publish(0)
+                self.leftWheel_pub.publish(80)
+                rospy.sleep(.59)
+                self.rightWheel_pub.publish(80)
+                self.leftWheel_pub.publish(80)
                 rospy.sleep(1)
+                self.rightWheel_pub.publish(80)
+                self.leftWheel_pub.publish(0)
+                rospy.sleep(.59)
                 self.busy = False
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(50)
@@ -328,10 +340,6 @@ class Controller:
         #print("        direction: %f" %float(direction))
         # turn and travel
 
-    def odom_cb(self, data):
-        angle = float(data.data)
-        self.state['theta'] = INIT_ANGLE + float(data.data)
-
     def arduino_cb(self, data):
         params = data.data.split(',')
         if len(params) < 4:
@@ -409,11 +417,9 @@ if __name__ == "__main__":
             {
             'ID':0,
             'robots':[
-                0,
                 1
             ],
             'robot_states':[
-                bigboy_state,
                 tinyboy_state
             ],
             'leader':1
