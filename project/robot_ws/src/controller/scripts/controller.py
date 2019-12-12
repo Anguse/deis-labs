@@ -21,6 +21,10 @@ INIT_ANGLE    = 0.0
 DEFAULT_SPEED = 50
 
 LINE_TRESHOLD = 700
+yrange_max1 = 437
+yrange_max2 = 372
+yrange_min1 = 423
+yrange_min2 = 352
 
 # 2. Side formation needs testing, leader now updates the speed
 #    to half of default speed when follower is behind. 
@@ -30,6 +34,10 @@ LINE_TRESHOLD = 700
 #TODO: add side formation mode in robot. Remove hardcoded case from action cb
 #      check why the communication to the arduino is so bad
 #      change time on raspberry
+#      add xrange, leave intersection -> wait until end of linefollow (r.sleep()) -> check collisions,
+#      dir?
+#      collisions -> for(ID 0-7, in der Nähe?) eigene funktion, shrimp coordinates
+#      platooning scenario (grade 3 -> blue and red shrimps -> avoid collision) -> shrimp_cb + odom
 
 class Controller:
     
@@ -44,8 +52,11 @@ class Controller:
         self.action_pub = rospy.Publisher('action', String, queue_size=10)
         self.leftWheel_pub = rospy.Publisher('bigboy/arduino/leftWheel', Int16, queue_size=-1)
         self.rightWheel_pub = rospy.Publisher('bigboy/arduino/rightWheel', Int16, queue_size=-1)
-        self.lineFollow_pub = rospy.Publisher('bigboy/arduino/linefollow', Int16, queue_size=-1)
-
+        self.linefollow_pub = rospy.Publisher('bigboy/arduino/linefollow', Int16, queue_size=-1)
+        self.turnDist_pub = rospy.Publisher('bigboy/arduino/turnDist', Int16, queue_size=-1)
+        self.travelDist_pub = rospy.Publisher('bigboy/arduino/travelDist', Int16, queue_size=-1)
+        self.stop_pub = rospy.Publisher('bigboy/arduino/stop', Int16, queue_size=-1)
+        self.resetStop_pub = rospy.Publisher('bigboy/arduino/resetStop', Int16, queue_size=-1)
         self.left_ir = 0.0
         self.left_inner_ir = 0.0
         self.right_ir = 0.0
@@ -105,10 +116,10 @@ class Controller:
                     if self.state['platoon_pos'] == 1:
                         if self.state['lane'] == robot_state['lane'] and not self.busy:
                             if self.state['lane'] == 0:
-                                # Shift to left lane
+                                # Shift to outer lane
                                 self.state['lane'] = 1
                             else:
-                                # Shift to right lane
+                                # Shift to inner lane
                                 self.state['lane'] = 0
                         # Break if leader and too far ahead
                         elif abs(polar_angle - self.state['polar_angle']) > pi/8:
@@ -164,8 +175,6 @@ class Controller:
             newLane = int(msg)
             rospy.loginfo("current lane:%i, new_lane:%i"%(self.state['lane'], newLane))
             if self.state['lane'] < newLane:
-                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(-1)
                 self.busy = True
                 # stop
                 self.rightWheel_pub.publish(0)
@@ -181,11 +190,7 @@ class Controller:
                 self.leftWheel_pub.publish(50)
                 rospy.sleep(1)
                 self.busy = False
-                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(50)
             elif self.state['lane'] > newLane:
-                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(-1)
                 self.busy = True
                 # stop
                 self.rightWheel_pub.publish(0)
@@ -201,8 +206,6 @@ class Controller:
                 self.leftWheel_pub.publish(0)
                 rospy.sleep(1)
                 self.busy = False
-                if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(50)
             else:
                 rospy.loginfo("already in lane %i"%newLane)
             self.state['lane'] = newLane
@@ -228,12 +231,41 @@ class Controller:
             newMode = int(msg)
             self.state['mode'] = newMode
             if newMode == LINE_FOLLOWING_MODE:
-                self.lineFollow_pub.publish(50)
                 self.state['speed'] = (50,50)
         elif(action_id == 'i'):
             print("turnAndTravel")
         elif(action_id == 'j'):
             print("intersection")
+            self.busy = True
+            if self.state['lane'] > 0:
+                # stop
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(0)
+                # switch right
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(50)
+                rospy.sleep(1.5)
+                self.rightWheel_pub.publish(50)
+                self.leftWheel_pub.publish(50)
+                rospy.sleep(1.7)
+                self.rightWheel_pub.publish(50)
+                self.leftWheel_pub.publish(0)
+                rospy.sleep(1)
+            while not ((self.state['y'] < yrange_max1 and self.state['y'] > yrange_min1) or (self.state['y'] < yrange_max2 and self.state['y'] > yrange_min2)):
+                self.linefollow_pub.publish(int(ctrl.state['speed'][0]))
+            self.linefollow_pub.publish(int(-1))
+            self.turnDist_pub.publish(int(90))
+            rospy.sleep(0.5)
+            self.travelDist_pub.publish(int(15))
+            rospy.sleep(0.5)
+            self.linefollow_pub.publish(int(ctrl.state['speed'][0]))
+            rospy.sleep(5)
+            # check for collisions
+            self.travelDist_pub.publish(int(15))
+            rospy.sleep(0.5)
+            self.turnDist_pub.publish(int(90))
+            rospy.sleep(0.5)
+            self.busy = False
         elif(action_id == 'k'):
             print('free')
         elif(action_id == 'l'):
@@ -347,15 +379,12 @@ class Controller:
     def left_outer_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.left_ir = data.illuminance
-    
     def left_inner_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.left_inner_ir = data.illuminance
-    
     def right_outer_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.right_ir = data.illuminance
-    
     def right_inner_cb(self, data):
         rospy.logdebug(data.illuminance)
         self.right_inner_ir = data.illuminance
@@ -414,9 +443,10 @@ if __name__ == "__main__":
     r = rospy.Rate(20)
     while not rospy.is_shutdown():
         if not ctrl.busy:
-            if ctrl.state['mode'] == LINE_FOLLOWING_MODE or ctrl.state['mode'] == SIDE_FORMATION_MODE:
-                ctrl.lineFollow_pub.publish(int(ctrl.state['speed'][0]))
+            if ctrl.state['mode'] == LINE_FOLLOWING_MODE:
+                ctrl.linefollow_pub.publish(int(ctrl.state['speed'][0]))
             else:
+                ctrl.linefollow_pub.publish(int(-1))
                 ctrl.leftWheel_pub.publish(int(ctrl.state['speed'][0]))
                 ctrl.rightWheel_pub.publish(int(ctrl.state['speed'][1]))
         heartbeat_msg = str(rospy.get_time()) + ',' + \
