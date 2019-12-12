@@ -15,7 +15,9 @@ class commandSender:
 
 def main():
 	rospy.init_node('bigboy_commandsender', anonymous=True)
-
+	target_robot_id = 1
+	target_robot_platoon_id = 0
+	source_robot_id = 0
 	myCommandSender = commandSender()
 
 	while True:
@@ -30,7 +32,7 @@ def main():
 			break
 		elif(key== 'f'):
 			print "Pressed f: Go forward"
-			commandMsg = ""+ str(rospy.get_time()) + ",g,1,0,0,60;60" #set speed, from GPS, to robots with no platoon, all robots, speed should be 255 left wheel, 255 right wheel
+			commandMsg = ""+ str(rospy.get_time()) + ",g,"+source_robot_id+","+target_robot_platoon_id+","+target_robot_id+",60;60" #set speed, from GPS, to robots with no platoon, all robots, speed should be 255 left wheel, 255 right wheel
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== 'b'):

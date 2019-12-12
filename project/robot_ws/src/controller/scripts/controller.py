@@ -3,7 +3,7 @@
 import rospy
 import math
 from math import cos, sin, atan2, pi, sqrt
-from std_msgs.msg import String, Int16
+from std_msgs.msg import String, Int16, Int32
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
 from sensor_msgs.msg import Range, Illuminance
@@ -33,7 +33,7 @@ LINE_TRESHOLD = 700
 
 class Controller:
     
-    def __init__(self, state, platoons):
+    def __init__(self, state, platoons, robot):
 
         self.state = state
         self.busy = False
@@ -42,28 +42,30 @@ class Controller:
         self.heartbeat_pub = rospy.Publisher('heartbeat', String, queue_size=10)
         self.feedback_pub = rospy.Publisher('feedback', String, queue_size=10)
         self.action_pub = rospy.Publisher('action', String, queue_size=10)
-        self.leftWheel_pub = rospy.Publisher('bigboy/arduino/leftWheel', Int16, queue_size=-1)
-        self.rightWheel_pub = rospy.Publisher('bigboy/arduino/rightWheel', Int16, queue_size=-1)
-        self.lineFollow_pub = rospy.Publisher('bigboy/arduino/linefollow', Int16, queue_size=-1)
+        self.leftWheel_pub = rospy.Publisher(robot+'/arduino/leftWheel', Int16, queue_size=-1)
+        self.rightWheel_pub = rospy.Publisher(robot+'/arduino/rightWheel', Int16, queue_size=-1)
+        self.lineFollow_pub = rospy.Publisher(robot+'/arduino/linefollow', Int16, queue_size=-1)
 
         self.left_ir = 0.0
         self.left_inner_ir = 0.0
         self.right_ir = 0.0
         self.right_inner_ir = 0.0
 
-        rospy.Subscriber('bigboy/ultrasound', Range, self.ultrasound_cb)
-        rospy.Subscriber('bigboy/left', Illuminance, self.left_outer_cb)
-        rospy.Subscriber('bigboy/left_inner', Illuminance, self.left_inner_cb)
-        rospy.Subscriber('bigboy/right', Illuminance, self.right_outer_cb)
-        rospy.Subscriber('bigboy/right_inner', Illuminance, self.right_inner_cb)
+        rospy.Subscriber(robot+'/ultrasound', Range, self.ultrasound_cb)
+        rospy.Subscriber(robot+'/left', Illuminance, self.left_outer_cb)
+        rospy.Subscriber(robot+'/left_inner', Illuminance, self.left_inner_cb)
+        rospy.Subscriber(robot+'/right', Illuminance, self.right_outer_cb)
+        rospy.Subscriber(robot+'/right_inner', Illuminance, self.right_inner_cb)
+        rospy.Subscriber(robot+'/right_enc', Int32, self.right_enc_cb)
+        rospy.Subscriber(robot+'/left_enc', Int32, self.left_enc_cb)
 
         rospy.Subscriber('josefoutput', String, self.gps_cb)
         rospy.Subscriber('action', String, self.action_cb)
         rospy.Subscriber('heartbeat', String, self.heartbeat_cb)
         rospy.Subscriber('feedback', String, self.feedback_cb)
-        rospy.Subscriber('bigboy_arduino_read', String, self.arduino_cb)
-        rospy.Subscriber('bigboy_shrimp', String, self.shrimp_cb)
-        rospy.Subscriber('bigboy_odom', String, self.odom_cb)
+        rospy.Subscriber(robot+'_arduino_read', String, self.arduino_cb)
+        rospy.Subscriber(robot+'_shrimp', String, self.shrimp_cb)
+        rospy.Subscriber(robot+'_odom', String, self.odom_cb)
 
     def gps_cb(self,data):
         states = data.data.split(';')
@@ -230,6 +232,8 @@ class Controller:
             if newMode == LINE_FOLLOWING_MODE:
                 self.lineFollow_pub.publish(50)
                 self.state['speed'] = (50,50)
+            else:
+                self.lineFollow_pub.publish(-1)
         elif(action_id == 'i'):
             print("turnAndTravel")
         elif(action_id == 'j'):
@@ -360,10 +364,15 @@ class Controller:
         rospy.logdebug(data.illuminance)
         self.right_inner_ir = data.illuminance
 
+    def left_enc_cb(self, data):
+        rospy.loginfo("left: %s"%data.data)
+
+    def right_enc_cb(self, data):
+        rospy.loginfo("right: %s"%data.data)
 
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
-
+    robot = 'tinyboy'
     tinyboy_state = {
         'ID':1, 
         'platoon':0, 
@@ -410,7 +419,7 @@ if __name__ == "__main__":
             'leader':1
             }
     ]
-    ctrl = Controller(state=bigboy_state, platoons=platoons)
+    ctrl = Controller(state=tinyboy_state, platoons=platoons, robot=robot)
     r = rospy.Rate(20)
     while not rospy.is_shutdown():
         if not ctrl.busy:
