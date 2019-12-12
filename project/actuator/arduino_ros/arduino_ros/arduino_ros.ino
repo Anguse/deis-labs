@@ -73,7 +73,7 @@ void travelDist_cb(const std_msgs::Int16& cmd_msg) {
   int targetCount = 0;
   int enccount = 0;
 
-  if (!stopped) {
+  if (true) {
     numRev = (float) cmd_msg.data / wheelCirc;
     targetCount = numRev * countsPerRev;
     enccount = encoder.getTicks(RIGHT);
@@ -90,7 +90,7 @@ void turnDist_cb(const std_msgs::Int16& cmd_msg) {
   int targetCount = 0;
   int enccount = 0;
 
-  if (!stopped) {
+  if (true) {
     float rotationDist = (abs(cmd_msg.data) / 360) * PI * 2 * 10;
     numRev = (float) rotationDist / wheelCirc;
 
@@ -112,27 +112,27 @@ void turnDist_cb(const std_msgs::Int16& cmd_msg) {
   }
 }
 void stop_cb(const std_msgs::Int16& cmd_msg) {
-    stopped = true;
-    motors.stop();
-}
-void reset_stop_cb(const std_msgs::Int16& cmd_msg) {
-    stopped = false;
+    if (!stopped){
+      stopped = true;
+      motors.stop();
+    } else{
+      stopped = false;
+    }
 }
 
 ros::Subscriber<std_msgs::Int16> lw_sub("bigboy/arduino/leftWheel", leftWheel_cb);
 ros::Subscriber<std_msgs::Int16> rw_sub("bigboy/arduino/rightWheel", rightWheel_cb);
 ros::Subscriber<std_msgs::Int16> linefollow_sub("bigboy/arduino/linefollow", linefollow_cb);
-//ros::Subscriber<std_msgs::Int16> turnDist_sub("bigboy/arduino/turnDist", turnDist_cb);
-//ros::Subscriber<std_msgs::Int16> travelDist_sub("bigboy/arduino/travelDist", travelDist_cb);
-//ros::Subscriber<std_msgs::Int16> stop_sub("bigboy/arduino/stop", stop_cb);
-//ros::Subscriber<std_msgs::Int16> resetStop_sub("bigboy/arduino/resetStop", reset_stop_cb);
+ros::Subscriber<std_msgs::Int16> turnDist_sub("bigboy/arduino/turnDist", turnDist_cb);
+ros::Subscriber<std_msgs::Int16> travelDist_sub("bigboy/arduino/travelDist", travelDist_cb);
+ros::Subscriber<std_msgs::Int16> stop_sub("bigboy/arduino/stop", stop_cb);
 
 sensor_msgs::Range range_msg;
 sensor_msgs::Illuminance illu_left_msg, illu_right_msg;//, illu_left_inner_msg, illu_right_inner_msg;
 //std_msgs::Int16 linefollow_msg;
 //ros::Publisher pub_range( "bigboy/ultrasound", &range_msg);
-ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
-ros::Publisher pub_right( "bigboy/right", &illu_right_msg);
+//ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
+//ros::Publisher pub_right( "bigboy/right", &illu_right_msg);
 
 
 void setup() {
@@ -142,8 +142,8 @@ void setup() {
   //nh.getHardware()->setBaud(9600);
   nh.initNode();
   //nh.advertise(pub_range);
-  nh.advertise(pub_left);
-  nh.advertise(pub_right);
+  //nh.advertise(pub_left);
+  //nh.advertise(pub_right);
   /*
     range_msg.radiation_type = sensor_msgs::Range::ULTRASOUND;
     range_msg.header.frame_id =  "/ultrasound";
@@ -155,10 +155,9 @@ void setup() {
   nh.subscribe(lw_sub);
   nh.subscribe(rw_sub);
   nh.subscribe(linefollow_sub);
-  //nh.subscribe(turnDist_sub);
-  //nh.subscribe(travelDist_sub);
-  //nh.subscribe(stop_sub);
-  //nh.subscribe(resetStop_sub);
+  nh.subscribe(turnDist_sub);
+  nh.subscribe(travelDist_sub);
+  nh.subscribe(stop_sub);
 }
 
 void loop() {
@@ -261,7 +260,7 @@ void updateDist(){
   range_msg.range = distance;
   range_msg.header.stamp = nh.now();
   pub_range.publish(&range_msg);
-}*/
+}
 
 void updateIllu() {
   illu_left_msg.illuminance = left_outer.read();
@@ -270,4 +269,4 @@ void updateIllu() {
   illu_right_msg.header.stamp = nh.now();
   pub_left.publish(&illu_left_msg);
   pub_right.publish(&illu_right_msg);
-}
+}*/
