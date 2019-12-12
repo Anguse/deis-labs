@@ -4,7 +4,7 @@ from collections import deque
 from imutils.video import VideoStream
 import numpy as np
 import argparse
-#import rospy
+import rospy
 import cv2
 import imutils
 import time
@@ -48,8 +48,8 @@ rate = rospy.Rate(10) # 10hz
 
 
 # keep looping
-#while not rospy.is_shutdown():
-while True:
+while not rospy.is_shutdown():
+#while True:
 	# grab the current frame
 	frame = vs.read()
 
@@ -96,8 +96,8 @@ while True:
 		centroid_x = center[0]
 		centroid_y = abs(center[1]-frameHeight)
 		#Send timestamp,x,y to controller
-		#pos_str = str(rospy.get_time())+','+str(centroid_x)+','+str(centroid_y)
-		#pub.publish(pos_str)
+		pos_str = str(rospy.get_time())+','+str(centroid_x)+','+str(centroid_y)
+		pub.publish(pos_str)
 
 
 		# only proceed if the radius meets a minimum size
