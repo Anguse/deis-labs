@@ -19,8 +19,15 @@ args = vars(ap.parse_args())
 # define the lower and upper boundaries of the "red"
 # ball in the HSV color space, then initialize the
 # list of tracked points
+
+#Blue Shrimp lower(22,20,0) upper(74,195,190)
+#Red Shrimp lower(0,29,0) upper(12,255,200)
+
 redLower = (0, 21, 75)
 redUpper = (20,150 ,220 )
+blueLower = (22,20,0)
+blueUpper = (74,195,190)
+
 pts = deque(maxlen=args["buffer"])
 
 # if a video path was not supplied, grab the reference
@@ -76,15 +83,32 @@ while not rospy.is_shutdown():
 	mask = cv2.inRange(hsv, redLower, redUpper)
 	mask = cv2.erode(mask, None, iterations=2)
 	mask = cv2.dilate(mask, None, iterations=2)
-		# find contours in the mask and initialize the current
+
+'''	#same construct using for the color "blue" instead
+	mask2 = cv2.inRange(hsv, blueLower, blueUpper)
+	mask2 = cv2.erode(mask2, None, iterations=2)
+	mask2 = cv2.dilate(mask2, None, iterations=2)
+'''
+
+	# find contours in the mask and initialize the current
 	# (x, y) center of the ball
 	cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
 		cv2.CHAIN_APPROX_SIMPLE)
 	cnts = imutils.grab_contours(cnts)
 	center = None
+'''
+	# Same thing for blue as for red
+
+	cnts2 = cv2.findContours(mask2.copy(), cv2.RETR_EXTERNAL,
+		cv2.CHAIN_APPROX_SIMPLE)
+	cnts2 = imutils.grab_contours(cnts2)
+	center2 = None'''
+
+
+
 
 	# only proceed if at least one contour was found
-	if len(cnts) > 0:
+	if len(cnts) > 0''' or len(cnts2) > 0''':
 		# find the largest contour in the mask, then use
 		# it to compute the minimum enclosing circle and
 		# centroid
@@ -95,9 +119,24 @@ while not rospy.is_shutdown():
 		center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
 		centroid_x = center[0]
 		centroid_y = abs(center[1]-frameHeight)
+
+	'''	#Second time for second contour
+		c2 = max(cnts2, key=cv2.contourArea)
+		((x2, y2), radius2) = cv2.minEnclosingCircle(c2)
+		M2 = cv2.moments(c2)
+		#These values will be sent to controller instead of saved to file
+		center2 = (int(M2["m10"] / M2["m00"]), int(M2["m01"] / M2["m00"]))
+		centroid_x2 = center2[0]
+		centroid_y2 = abs(center2[1]-frameHeight)'''
+
+
+
 		#Send timestamp,x,y to controller
 		pos_str = str(rospy.get_time())+','+str(centroid_x)+','+str(centroid_y)
 		pub.publish(pos_str)
+
+		'''pos_str2 ='Blue: ' + str(rospy.get_time())+','+str(centroid_x2)+','+str(centroid_y2)
+		pub.publish(pos_str2)'''
 
 
 		# only proceed if the radius meets a minimum size
@@ -108,8 +147,16 @@ while not rospy.is_shutdown():
 				(0, 255, 255), 2)
 			cv2.circle(frame, center, 5, (255, 0, 0), -1)
 
+		'''if radius2 > 10:
+			# draw the circle and centroid on the frame,
+			# then update the list of tracked points
+			cv2.circle(frame, (int(x2), int(y2)), int(radius2),
+				(0, 255, 255), 2)
+			cv2.circle(frame, center2, 5, (255, 0, 0), -1)'''
+
 	# update the points queue
 	pts.appendleft(center)
+	#pts.appendleft(center2)
 		# loop over the set of tracked points
 	for i in range(1, len(pts)):
 		# if either of the tracked points are None, ignore
