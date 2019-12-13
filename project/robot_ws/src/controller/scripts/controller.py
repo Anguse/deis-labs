@@ -73,12 +73,15 @@ class Controller:
         tail_state_params = states[0].replace('[', '').split(' ')
 
         # Calculate pose
+        '''
         dx = float(nose_state_params[0]) - float(tail_state_params[0])
         dy = float(nose_state_params[1]) - float(tail_state_params[1])
         self.state['theta'] = atan2(dy,dx)
         
 
         params = tail_state_params
+        '''
+        params = states[self.state['ID']].replace('[', '').split(' ')
         map_center = {'x':302, 'y':417}
 
         if params[0] != str(-1) and params[1] != str(-1) and params[2] != str(-1) and params[4] != str(-1):
@@ -96,7 +99,9 @@ class Controller:
 
         gps_frame = []
         adjusted_speed = 0
-        for i in range(2,len(states)):
+        for i in range(len(states)):
+            if i == int(self.state['ID']):
+                continue
             state = states[i].replace('[', '')
             params = state.split(' ')
             x = float(params[0]) - map_center['x']
@@ -131,6 +136,8 @@ class Controller:
                 elif(self.state['mode'] == LINE_FOLLOWING_MODE):
                     if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
                         self.break_applied = abs(polar_angle - self.state['polar_angle'])/(pi/8)
+                        print("apply break for %s in position (%s,%s)"%(str(robot_state['ID']), robot_state['x'], robot_state['y']))
+                        print("my position (%s,%s)"%(self.state['x'], self.state['y']))
                     elif self.break_applied != 0:
                         self.break_applied = 0
                 else:
@@ -139,6 +146,7 @@ class Controller:
             rightWheelSpeed = self.state['speed'][1] - self.state['speed'][1]*self.break_applied
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             gps_frame.append(state)
+            print('my position: (%s,%s)'%(params[0], params[1]))
                 
     def action_cb(self,data):
         params = data.data.split(',')	
@@ -311,7 +319,8 @@ class Controller:
         pose = params[6].split(';')
         speed = params[7].split(';')
         if robot_id in platoons[self.state['platoon']]['robots'] and robot_id != self.state['ID']:
-            print "heartbeat from %i" %robot_id
+            #print "heartbeat from %i" %robot_id
+            return
 
     def feedback_cb(self,data):
         rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
@@ -392,7 +401,7 @@ if __name__ == "__main__":
     tinyboy_state = {
         'ID':1, 
         'platoon':0, 
-        'platoon_pos':2,
+        'platoon_pos':1,
         'type':-1, 
         'lane':0,
         'role':None, 
@@ -408,7 +417,7 @@ if __name__ == "__main__":
     bigboy_state = {
         'ID':0, 
         'platoon':0, 
-        'platoon_pos':1,
+        'platoon_pos':2,
         'type':-1, 
         'lane':0,
         'role':None, 
@@ -425,10 +434,12 @@ if __name__ == "__main__":
             {
             'ID':0,
             'robots':[
-                1
+                1,
+                0
             ],
             'robot_states':[
-                tinyboy_state
+                tinyboy_state,
+                bigboy_state
             ],
             'leader':1
             }

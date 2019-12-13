@@ -66,19 +66,26 @@ void laneswitch_cb( const std_msgs::Int16& cmd_msg) {
   }
 }
 void linefollow_cb( const std_msgs::Int16& cmd_msg) {
+  float offset = 19.5;
   if (cmd_msg.data > -1) {
     LINEFOLLOW = true;
-    SPEED = cmd_msg.data;
-  } else {
+    SPEED = cmd_msg.data + offset;
+  }else {
     LINEFOLLOW = false;
     SPEED = 0;
   }
 }
 void leftWheel_cb( const std_msgs::Int16& cmd_msg) {
-  motors.leftMotor(-cmd_msg.data);
+  float offset = 19.5;
+  if(cmd_msg.data > 0){
+    motors.leftMotor(-cmd_msg.data - offset);    
+  }
+  else{
+    motors.leftMotor(-cmd_msg.data);
+  }
 }
 void rightWheel_cb( const std_msgs::Int16& cmd_msg) {
-  float offset = 7;
+  float offset = 19.5;
   if (cmd_msg.data > 0) {
     motors.rightMotor(cmd_msg.data + offset);
   } else if (cmd_msg.data < 0) {
