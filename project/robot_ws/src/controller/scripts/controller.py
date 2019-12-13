@@ -178,42 +178,42 @@ class Controller:
             if self.state['lane'] < newLane:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(-1)
-                #self.laneSwitch_pub.publish(1)
                 self.busy = True
+                #self.laneSwitch_pub.publish(1)
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
                 # switch left
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(0)
-                rospy.sleep(.59)
+                rospy.sleep(.58)
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(80)
                 rospy.sleep(1)
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(80)
-                rospy.sleep(.59)
+                rospy.sleep(.58)
                 self.busy = False
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(50)
             elif self.state['lane'] > newLane:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(-1)
-                #self.laneSwitch_pub.publish(0)
                 self.busy = True
+                #self.laneSwitch_pub.publish(0)
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
                 # switch right
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(80)
-                rospy.sleep(.59)
+                rospy.sleep(.58)
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(80)
                 rospy.sleep(1)
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(0)
-                rospy.sleep(.59)
+                rospy.sleep(.58)
                 self.busy = False
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(50)
@@ -225,6 +225,14 @@ class Controller:
             self.state['role'] = msg
         elif(action_id == 'f'):
             print("setPosition")
+            # only pos 1 or 2
+            newPos = msg
+            if newPos < self.state['platoon_pos']:
+                print("become follower")
+            elif newPos > self.state['platoon_pos']:
+                print("become leader")
+            else:
+                print("no change")
         elif(action_id == 'g'):
             if not self.busy:
                 rospy.loginfo("setSpeed %s"%msg)

@@ -55,9 +55,16 @@ char odom[] = "/odom";
 
 int LINETHRESHOLD = 700;
 bool LINEFOLLOW = false;
-int SPEED = 50;
+int SPEED = 60;
 
 // Callbacks
+void laneswitch_cb( const std_msgs::Int16& cmd_msg) {
+  if (cmd_msg.data > 0) {
+    laneswitch(true);
+  } else {
+    laneswitch(false);
+  }
+}
 void linefollow_cb( const std_msgs::Int16& cmd_msg) {
   if (cmd_msg.data > -1) {
     LINEFOLLOW = true;
@@ -83,7 +90,7 @@ void rightWheel_cb( const std_msgs::Int16& cmd_msg) {
 
 //sensor_msgs::Range range_msg;
 sensor_msgs::Illuminance illu_left_msg, illu_right_msg;//, illu_left_inner_msg, illu_right_inner_msg;
-std_msgs::Int16 linefollow_msg;
+std_msgs::Int16 linefollow_msg, laneswitch_msg;
 std_msgs::Int32 left_enc_msg, right_enc_msg;
 //ros::Publisher pub_range( robot+"/ultrasound", &range_msg);
 ros::Publisher pub_left("tinyboy/left", &illu_left_msg);
@@ -98,6 +105,7 @@ ros::Publisher pub_right_enc("tinyboy/right_enc", &right_enc_msg);
 ros::Subscriber<std_msgs::Int16> lw_sub("tinyboy/arduino/leftWheel", leftWheel_cb);
 ros::Subscriber<std_msgs::Int16> rw_sub("tinyboy/arduino/rightWheel", rightWheel_cb);
 ros::Subscriber<std_msgs::Int16> linefollow_sub("tinyboy/arduino/linefollow", linefollow_cb);
+ros::Subscriber<std_msgs::Int16> laneswitch_sub("tinyboy/arduino/laneswitch", laneswitch_cb);
 
 void setup() {
   encoder.clearEnc(BOTH);
@@ -123,6 +131,7 @@ void setup() {
   nh.subscribe(lw_sub);
   nh.subscribe(rw_sub);
   nh.subscribe(linefollow_sub);
+  nh.subscribe(laneswitch_sub);
 }
 
 void loop() {
@@ -176,6 +185,76 @@ void linefollowing() {
   }
   delay(0);  // add a delay to decrease sensitivity.
 }
+
+void laneswitch(bool gotoleft) {
+  bool lanechanged = false;
+  bool angled = false;
+  int enccount = 0;
+  //Target count is how far the robot will go into the lane?? was 192/4
+  int targetCount;
+  if (gotoleft) {
+    //go left
+    unsigned long starttime;
+    unsigned long endtime;
+    unsigned long diff;
+    starttime = millis();
+    while (!lanechanged) {
+      motors.rightMotor(60);
+      motors.leftMotor(-(60 - 30));
+      if (right_outer.read() > LINETHRESHOLD) {
+        lanechanged = true;
+      }
+    }
+    endtime = millis();
+    diff = endtime - starttime;
+    while (right_outer.read() > LINETHRESHOLD) {
+      motors.drive(60);
+    }
+    motors.stop();
+    targetCount = 192 / 4;
+    enccount = encoder.getTicks(LEFT);
+    motors.leftMotor(-60);
+    targetCount += enccount;
+    starttime = millis();
+    endtime = millis();
+    while (endtime-starttime < diff/2) {
+      enccount = encoder.getTicks(LEFT);
+      endtime = millis();
+    }
+  }else{
+    //go right
+    unsigned long starttime;
+    unsigned long endtime;
+    unsigned long diff;
+    starttime = millis();
+    while (!lanechanged) {
+      motors.rightMotor(60-30);
+      motors.leftMotor(-(60));
+      if (left_outer.read() > LINETHRESHOLD) {
+        lanechanged = true;
+      }
+    }
+    endtime = millis();
+    diff = endtime - starttime;
+    while (left_outer.read() > LINETHRESHOLD) {
+      motors.drive(SPEED);
+    }
+    motors.stop();
+    targetCount = 192 / 4;
+    enccount = encoder.getTicks(RIGHT);
+    motors.rightMotor(60);
+    targetCount += enccount;
+    starttime = millis();
+    endtime = millis();
+    while (endtime-starttime < diff/2) {
+      enccount = encoder.getTicks(RIGHT);
+      endtime = millis();
+    }
+  }
+  //finalize lanechange
+  motors.stop();
+}
+
 /*
   void updateOdom(){
   // drive in a circle
