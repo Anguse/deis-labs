@@ -40,8 +40,9 @@ class Controller:
         self.leftWheel_pub = rospy.Publisher(robot+'/arduino/leftWheel', Int16, queue_size=-1)
         self.rightWheel_pub = rospy.Publisher(robot+'/arduino/rightWheel', Int16, queue_size=-1)
         self.linefollow_pub = rospy.Publisher(robot+'/arduino/linefollow', Int16, queue_size=-1)
-        self.turnDist_pub = rospy.Publisher(robot+'/arduino/turnDist', Int16, queue_size=-1)
-        self.travelDist_pub = rospy.Publisher(robot+'/arduino/travelDist', Int16, queue_size=-1)
+        #self.turnDist_pub = rospy.Publisher(robot+'/arduino/turnDist', Int16, queue_size=-1)
+        #self.travelDist_pub = rospy.Publisher(robot+'/arduino/travelDist', Int16, queue_size=-1)
+        self.turn_pub = rospy.Publisher(robot+'/arduino/turn', Int16, queue_size=-1)
         self.stop_pub = rospy.Publisher(robot+'/arduino/stop', Int16, queue_size=-1)
         self.resetStop_pub = rospy.Publisher(robot+'/arduino/resetStop', Int16, queue_size=-1)
         self.left_ir = 0.0
@@ -227,52 +228,80 @@ class Controller:
                 rospy.loginfo("Busy, can't set speed now.")
         elif(action_id == 'h'):
             print("setMode")
-            payload_params = msg
-            newMode = int(msg)
-            self.state['mode'] = newMode
-            if newMode == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                self.lineFollow_pub.publish(50)
-                self.state['speed'] = (50,50)
+            if self.busy:
+                print("currently bussy. cannot set mode")
             else:
-                self.linefollow_pub.publish(int(-1))
+                payload_params = msg
+                newMode = int(msg)
+                self.state['mode'] = newMode
+                if newMode == LINE_FOLLOWING_MODE or newMode == SIDE_FORMATION_MODE:
+                    self.linefollow_pub.publish(50)
+                    self.state['speed'] = (50,50)
+                elif newMode == LISTENING_MODE  or newMode == SHRIMP_FOLLOWING_MODE:
+                    self.linefollow_pub.publish(int(-1))
+                    self.rightWheel_pub.publish(0)
+                    self.leftWheel_pub.publish(0)
+                else:
+                    self.linefollow_pub.publish(int(-1))
+                    self.rightWheel_pub.publish(0)
+                    self.leftWheel_pub.publish(0)
         elif(action_id == 'i'):
             print("turnAndTravel")
-            self.travelDist_pub.publish(100)
-            self.turnDist_pub.publish(180)
+            self.busy = True
+            self.rightWheel_pub.publish(-80)
+            self.leftWheel_pub.publish(80)
+            rospy.sleep(1)
+            self.rightWheel_pub.publish(0)
+            self.leftWheel_pub.publish(0)
+            self.busy = False
         elif(action_id == 'j'):
             print("intersection")
             if self.state['mode'] == LINE_FOLLOWING_MODE:
                 self.busy = True
-                self.linefollow_pub.publish(int(-1))
-                if self.state['lane'] > 0:
+                #self.linefollow_pub.publish(int(-1))
+                #if self.state['lane'] > 0:
                     # stop
-                    self.rightWheel_pub.publish(0)
-                    self.leftWheel_pub.publish(0)
+                    #self.rightWheel_pub.publish(0)
+                    #self.leftWheel_pub.publish(0)
                     # switch right
-                    self.rightWheel_pub.publish(0)
-                    self.leftWheel_pub.publish(80)
-                    rospy.sleep(.59)
-                    self.rightWheel_pub.publish(80)
-                    self.leftWheel_pub.publish(80)
-                    rospy.sleep(1)
-                    self.rightWheel_pub.publish(80)
-                    self.leftWheel_pub.publish(0)
-                    rospy.sleep(.59)
-                    self.state['lane'] = 0
-                while (float(self.state['y']) < float(yrange_min2)) or (float(self.state['y']) > float(yrange_max1)):
-                    self.linefollow_pub.publish(50)
+                    #self.rightWheel_pub.publish(0)
+                    #self.leftWheel_pub.publish(80)
+                    #rospy.sleep(.59)
+                    #self.rightWheel_pub.publish(80)
+                    #self.leftWheel_pub.publish(80)
+                    #rospy.sleep(1)
+                    #self.rightWheel_pub.publish(80)
+                    #self.leftWheel_pub.publish(0)
+                    #rospy.sleep(.59)
+                    #self.state['lane'] = 0
+                #while (float(self.state['y']) < float(yrange_min2)) or (float(self.state['y']) > float(yrange_max1)):
+                    #self.linefollow_pub.publish(50)
                 self.linefollow_pub.publish(int(-1))
-                self.turnDist_pub.publish(int(90))
-                rospy.sleep(0.5)
-                self.travelDist_pub.publish(int(15))
+                self.rightWheel_pub.publish(-80)
+                self.leftWheel_pub.publish(80)
+                rospy.sleep(1)
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(0)
+                self.rightWheel_pub.publish(80)
+                self.leftWheel_pub.publish(80)
+                rospy.sleep(.55)
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(0)
                 rospy.sleep(0.5)
                 self.linefollow_pub.publish(50)
-                rospy.sleep(5)
+                rospy.sleep(10)
                 # check for collisions (optional)
-                self.travelDist_pub.publish(int(15))
-                rospy.sleep(0.5)
-                self.turnDist_pub.publish(int(90))
-                rospy.sleep(0.5)
+                self.linefollow_pub.publish(-1)
+                self.rightWheel_pub.publish(80)
+                self.leftWheel_pub.publish(80)
+                rospy.sleep(.55)
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(0)
+                self.rightWheel_pub.publish(-80)
+                self.leftWheel_pub.publish(80)
+                rospy.sleep(1)
+                self.rightWheel_pub.publish(0)
+                self.leftWheel_pub.publish(0)
                 self.busy = False
             else:
                 rospy.loginfo("intersection only allowed in linefollowing mode")
@@ -338,33 +367,44 @@ class Controller:
         print(data)
         params = data.data.split(',')
         timestamp = params[0]
-        x = int(params[1])
-        y = int(params[2])
+        x = float(params[1])
+        y = float(params[2])
         if self.state['mode'] == SHRIMP_FOLLOWING_MODE:
-            if x > 210:
-                # Turn right
-                leftWheelSpeed = 50
-                rightWheelSpeed = 0
-                action_id = 'g'
-                self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
-                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
+            dx = x - float(self.state['x'])
+            dy = y - float(self.state['y'])
+            #if abs(dx) < 5 and abs(dy) < 5: #Changed or to and
+             #   return
+            dist = sqrt(pow(dx,2)+pow(dy,2))
+            direction = atan2(dy,dx)
+            print("")
+            print("         distance: %f" %float(dist))
+            print("        direction: %f" %float(direction))
+            robot_angle = math.degrees(float(self.state['theta']))
+            difference = (robot_angle - math.degrees(float(direction)))
+            print("Direction: "+str(math.degrees(float(direction)))+' '+"Theta: "+str(math.degrees(self.state['theta'])))
+            print("difference: "+str(difference))
+            
+            
+            print("This is dist: "+str(dist))
+            if abs(difference) > 10.0 and dist > 30 :
+                if difference < 0:
+                    #turn right
+                    self.leftWheel_pub.publish(-38)
+                    self.rightWheel_pub.publish(38)
+                elif(difference > 0):
+                    #turn left
+                    self.leftWheel_pub.publish(38)
+                    self.rightWheel_pub.publish(-38)
+            elif dist > 30:
+                #move straight
+                self.leftWheel_pub.publish(60)
+                self.rightWheel_pub.publish(60)
             else:
-                # left
-                leftWheelSpeed = 0
-                rightWheelSpeed = 50
-                action_id = 'g'
-                self.arduino_write_pub.publish(action_id+','+str(leftWheelSpeed)+','+str(rightWheelSpeed)+'\n')
-                self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
-        #dx = x - self.state['x']
-        #dy = y - self.state['y']
-        #if abs(dx) < 5 or abs(dy) < 5 or self.state['mode'] != SHRIMP_FOLLOWING_MODE or self.busy:
-        #    return
-        #dist = sqrt(pow(dx,2)+pow(dy,2))
-        #direction = atan2(dx,dy)
-        #print("")
-        #print("         distance: %f" %float(dist))
-        #print("        direction: %f" %float(direction))
-        # turn and travel
+                print("Close enough to correct position")
+                self.leftWheel_pub.publish(0)
+                self.rightWheel_pub.publish(0)
+                self.busy = False
+
 
     def arduino_cb(self, data):
         params = data.data.split(',')
@@ -460,6 +500,8 @@ if __name__ == "__main__":
         if not ctrl.busy:
             if (ctrl.state['mode'] == LINE_FOLLOWING_MODE or ctrl.state['mode'] == SIDE_FORMATION_MODE) and ctrl.busy == False:
                 ctrl.linefollow_pub.publish(int(ctrl.state['speed'][0]))
+            elif ctrl.state['mode'] == SHRIMP_FOLLOWING_MODE:
+                pass
             else:
                 ctrl.linefollow_pub.publish(int(-1))
                 ctrl.leftWheel_pub.publish(int(ctrl.state['speed'][0]))

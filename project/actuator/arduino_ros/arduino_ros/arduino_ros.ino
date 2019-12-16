@@ -35,6 +35,11 @@ int SPEED = 50;
 bool ENDOFINTERSEC = false;
 bool stopped = false;
 
+/*bool travel = false;
+int traveldist = 0;
+bool turn = false;
+int turndist = 0;*/
+
 float wheelDiam = 6.5;   // 6.5cm diameter of wheel
 float wheelCirc = PI * wheelDiam; // Redbot wheel circumference = pi*D
 int countsPerRev = 192;
@@ -68,49 +73,38 @@ void rightWheel_cb( const std_msgs::Int16& cmd_msg) {
     motors.rightMotor(cmd_msg.data);
   }
 }
-void travelDist_cb(const std_msgs::Int16& cmd_msg) {
+/*void turn_cb( const std_msgs::Int16& cmd_msg) {
   float numRev;
   int targetCount = 0;
   int enccount = 0;
 
-  if (true) {
-    numRev = (float) cmd_msg.data / wheelCirc;
-    targetCount = numRev * countsPerRev;
-    enccount = encoder.getTicks(RIGHT);
-    targetCount += enccount;
-    motors.drive(SPEED);
-    while ((enccount < targetCount) && !stopped) {
-        enccount = encoder.getTicks(RIGHT);
-    }
-    motors.stop();
+  float rotationDist = (abs(cmd_msg.data) / 360) * PI * 2 * 10;
+  numRev = (float) rotationDist / wheelCirc;
+    
+  if (cmd_msg.data > 0) {
+      motors.leftMotor(SPEED);
+      motors.rightMotor(SPEED);
+  } else {
+      motors.leftMotor(-SPEED);
+      motors.rightMotor(-SPEED);
   }
+    
+  targetCount = numRev * countsPerRev;
+  enccount = encoder.getTicks(RIGHT);
+  targetCount += enccount;
+  while ((enccount < targetCount) && !stopped) {
+      enccount = encoder.getTicks(RIGHT);
+  }
+  motors.stop();
+}
+void travelDist_cb(const std_msgs::Int16& cmd_msg) {
+  travel = true;
+  traveldist = (int)cmd_msg.data;
 }
 void turnDist_cb(const std_msgs::Int16& cmd_msg) {
-  float numRev;
-  int targetCount = 0;
-  int enccount = 0;
-
-  if (true) {
-    float rotationDist = (abs(cmd_msg.data) / 360) * PI * 2 * 10;
-    numRev = (float) rotationDist / wheelCirc;
-
-    if (cmd_msg.data > 0) {
-        motors.leftMotor(SPEED);
-        motors.rightMotor(SPEED);
-    } else {
-        motors.leftMotor(-SPEED);
-        motors.rightMotor(-SPEED);
-    }
-
-    targetCount = numRev * countsPerRev;
-    enccount = encoder.getTicks(RIGHT);
-    targetCount += enccount;
-    while ((enccount < targetCount) && !stopped) {
-        enccount = encoder.getTicks(RIGHT);
-    }
-    motors.stop();
-  }
-}
+  turn = true;
+  turndist = (int)cmd_msg.data;
+}*/
 void stop_cb(const std_msgs::Int16& cmd_msg) {
     if (!stopped){
       stopped = true;
@@ -123,8 +117,9 @@ void stop_cb(const std_msgs::Int16& cmd_msg) {
 ros::Subscriber<std_msgs::Int16> lw_sub("bigboy/arduino/leftWheel", leftWheel_cb);
 ros::Subscriber<std_msgs::Int16> rw_sub("bigboy/arduino/rightWheel", rightWheel_cb);
 ros::Subscriber<std_msgs::Int16> linefollow_sub("bigboy/arduino/linefollow", linefollow_cb);
-ros::Subscriber<std_msgs::Int16> turnDist_sub("bigboy/arduino/turnDist", turnDist_cb);
-ros::Subscriber<std_msgs::Int16> travelDist_sub("bigboy/arduino/travelDist", travelDist_cb);
+//ros::Subscriber<std_msgs::Int16> turnDist_sub("bigboy/arduino/turnDist", turnDist_cb);
+//ros::Subscriber<std_msgs::Int16> travelDist_sub("bigboy/arduino/travelDist", travelDist_cb);
+//ros::Subscriber<std_msgs::Int16> turn_sub("bigboy/arduino/turn", turn_cb);
 ros::Subscriber<std_msgs::Int16> stop_sub("bigboy/arduino/stop", stop_cb);
 
 sensor_msgs::Range range_msg;
@@ -155,8 +150,9 @@ void setup() {
   nh.subscribe(lw_sub);
   nh.subscribe(rw_sub);
   nh.subscribe(linefollow_sub);
-  nh.subscribe(turnDist_sub);
-  nh.subscribe(travelDist_sub);
+  //nh.subscribe(turnDist_sub);
+  //nh.subscribe(travelDist_sub);
+  //nh.subscribe(turn_sub);
   nh.subscribe(stop_sub);
 }
 
@@ -167,10 +163,60 @@ void loop() {
   if (LINEFOLLOW) {
     linefollowing();
   }
+  /*if (turn){
+    turndistance();
+  }
+  if (travel){
+    drivedistance();
+  }*/
   nh.spinOnce();
   //delay(1);
 }
 
+/*void drivedistance(){
+  float numRev;
+  int targetCount = 0;
+  int enccount = 0;
+  
+  numRev = (float) traveldist / wheelCirc;
+  targetCount = numRev * countsPerRev;
+  enccount = encoder.getTicks(RIGHT);
+  targetCount += enccount;
+  motors.drive(SPEED);
+  while ((enccount < targetCount) && !stopped) {
+    enccount = encoder.getTicks(RIGHT);
+  }
+  motors.stop();
+  travel = false;
+  traveldist = 0;
+}
+
+void turndistance(){
+  float numRev;
+  int targetCount = 0;
+  int enccount = 0;
+
+  float rotationDist = (abs(turndist) / 360) * PI * 2 * 10;
+  numRev = (float) rotationDist / wheelCirc;
+    
+  if (turndist > 0) {
+      motors.leftMotor(SPEED);
+      motors.rightMotor(SPEED);
+  } else {
+      motors.leftMotor(-SPEED);
+      motors.rightMotor(-SPEED);
+  }
+    
+  targetCount = numRev * countsPerRev;
+  enccount = encoder.getTicks(RIGHT);
+  targetCount += enccount;
+  while ((enccount < targetCount) && !stopped) {
+      enccount = encoder.getTicks(RIGHT);
+  }
+  motors.stop();
+  turn = false;
+  turndist = 0;
+}*/
 
 void linefollowing() {
   //custom controls
