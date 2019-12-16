@@ -17,6 +17,9 @@ OUTSIDE_BOUNDARY = 98
 OUTER_LANE_BOUNDARY = 76
 INNER_LANE_BOUNDARY = 55
 
+LEADER_LANE = 1
+FOLLOWER_LANE = 0
+
 INIT_ANGLE    = 0.0
 DEFAULT_SPEED = 50
 
@@ -100,7 +103,7 @@ class Controller:
         gps_frame = []
         adjusted_speed = 0
         for i in range(len(states)):
-            if i == int(self.state['ID']):
+            if i == self.state['ID']:
                 continue
             state = states[i].replace('[', '')
             params = state.split(' ')
@@ -117,36 +120,37 @@ class Controller:
                 robot_state['z'] = params[2]
                 robot_state['polar_angle'] = polar_angle
                 robot_state['polar_r'] = polar_r
+                #print("robot %s in platoon in position (%s,%s)"%(robot_state['ID'], robot_state['x'], robot_state['y']))
                 
                 if(self.state['mode'] == SIDE_FORMATION_MODE):
                     if self.state['platoon_pos'] == 1:
                         if self.state['lane'] == robot_state['lane'] and not self.busy:
-                            if self.state['lane'] == 0:
+                            if self.state['lane'] == FOLLOWER_LANE:
                                 # Shift to left lane
-                                self.state['lane'] = 1
-                            else:
-                                # Shift to right lane
-                                self.state['lane'] = 0
+                                self.state['lane'] = LEADER_LANE
                         # Break if leader and too far ahead
                         elif abs(polar_angle - self.state['polar_angle']) > pi/8:
                             ## Wait for robot behind
-                            self.break_applied = .5
+                            print("waiting for robot behind")
+                            self.break_applied = .25
                         elif self.break_applied != 0:
                             self.break_applied = 0
+                            self.state['speed'] = (50,50)
                 elif(self.state['mode'] == LINE_FOLLOWING_MODE):
-                    if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
-                        self.break_applied = abs(polar_angle - self.state['polar_angle'])/(pi/8)
-                        print("apply break for %s in position (%s,%s)"%(str(robot_state['ID']), robot_state['x'], robot_state['y']))
-                        print("my position (%s,%s)"%(self.state['x'], self.state['y']))
-                    elif self.break_applied != 0:
-                        self.break_applied = 0
+                    if self.state['platoon_pos'] > 1:
+                        if abs(polar_r - self.state['polar_r']) < 35 and (polar_angle - self.state['polar_angle']) < pi/8:
+                            self.break_applied = abs(polar_angle - self.state['polar_angle'])/(pi/8)
+                            print("apply break for %s in position (%s,%s)"%(str(robot_state['ID']), robot_state['x'], robot_state['y']))
+                            print("my position (%s,%s)"%(self.state['x'], self.state['y']))
+                        elif self.break_applied != 0:
+                            self.break_applied = 0
+                            self.state['speed'] = (50,50)
                 else:
                     self.break_applied = 0
             leftWheelSpeed = self.state['speed'][0] - self.state['speed'][0]*self.break_applied
             rightWheelSpeed = self.state['speed'][1] - self.state['speed'][1]*self.break_applied
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             gps_frame.append(state)
-        print('my position: (%s,%s)'%(self.state['x'], self.state['y']))
         
                 
     def action_cb(self,data):
@@ -188,7 +192,8 @@ class Controller:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(-1)
                 self.busy = True
-                #self.laneSwitch_pub.publish(1)
+                self.laneSwitch_pub.publish(1)
+                '''
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
@@ -202,6 +207,7 @@ class Controller:
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(80)
                 rospy.sleep(.58)
+                '''
                 self.busy = False
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(50)
@@ -209,7 +215,8 @@ class Controller:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(-1)
                 self.busy = True
-                #self.laneSwitch_pub.publish(0)
+                self.laneSwitch_pub.publish(0)
+                '''
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
@@ -223,6 +230,7 @@ class Controller:
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(0)
                 rospy.sleep(.58)
+                '''
                 self.busy = False
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.lineFollow_pub.publish(50)
@@ -435,12 +443,12 @@ if __name__ == "__main__":
             {
             'ID':0,
             'robots':[
-                1,
-                0
+                0,
+                1
             ],
             'robot_states':[
-                tinyboy_state,
-                bigboy_state
+                bigboy_state,
+                tinyboy_state
             ],
             'leader':1
             }

@@ -205,8 +205,8 @@ void laneswitch(bool gotoleft) {
     unsigned long diff;
     starttime = millis();
     while (!lanechanged) {
-      motors.rightMotor(60);
-      motors.leftMotor(-(60 - 30));
+      motors.rightMotor(SPEED);
+      motors.leftMotor(-(SPEED - 30));
       if (right_outer.read() > LINETHRESHOLD) {
         lanechanged = true;
       }
@@ -214,12 +214,12 @@ void laneswitch(bool gotoleft) {
     endtime = millis();
     diff = endtime - starttime;
     while (right_outer.read() > LINETHRESHOLD) {
-      motors.drive(60);
+      motors.drive(SPEED);
     }
     motors.stop();
     targetCount = 192 / 4;
     enccount = encoder.getTicks(LEFT);
-    motors.leftMotor(-60);
+    motors.leftMotor(-SPEED);
     targetCount += enccount;
     starttime = millis();
     endtime = millis();
@@ -234,8 +234,8 @@ void laneswitch(bool gotoleft) {
     unsigned long diff;
     starttime = millis();
     while (!lanechanged) {
-      motors.rightMotor(60-30);
-      motors.leftMotor(-(60));
+      motors.rightMotor(SPEED-30);
+      motors.leftMotor(-(SPEED));
       if (left_outer.read() > LINETHRESHOLD) {
         lanechanged = true;
       }
@@ -248,7 +248,7 @@ void laneswitch(bool gotoleft) {
     motors.stop();
     targetCount = 192 / 4;
     enccount = encoder.getTicks(RIGHT);
-    motors.rightMotor(60);
+    motors.rightMotor(SPEED);
     targetCount += enccount;
     starttime = millis();
     endtime = millis();
