@@ -134,7 +134,6 @@ void setup() {
     range_msg.min_range = 0.0;
     range_msg.max_range = 6.47;
   */
-
   nh.subscribe(lw_sub);
   nh.subscribe(rw_sub);
   nh.subscribe(linefollow_sub);

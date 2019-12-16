@@ -146,7 +146,8 @@ class Controller:
             rightWheelSpeed = self.state['speed'][1] - self.state['speed'][1]*self.break_applied
             self.state['speed'] = (leftWheelSpeed,rightWheelSpeed)
             gps_frame.append(state)
-            print('my position: (%s,%s)'%(params[0], params[1]))
+        print('my position: (%s,%s)'%(self.state['x'], self.state['y']))
+        
                 
     def action_cb(self,data):
         params = data.data.split(',')	
