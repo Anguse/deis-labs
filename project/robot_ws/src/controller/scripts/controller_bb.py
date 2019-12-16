@@ -135,7 +135,7 @@ class Controller:
                             self.break_applied = .25
                         elif self.break_applied != 0:
                             self.break_applied = 0
-                            self.state['speed'] = (40,40)
+                            self.state['speed'] = (50,50)
                 elif(self.state['mode'] == LINE_FOLLOWING_MODE):
                     if self.state['platoon_pos'] > 1:
                         if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
@@ -406,7 +406,7 @@ class Controller:
 
 if __name__ == "__main__":
     rospy.init_node('controller', anonymous=True)
-    robot = 'tinyboy'
+    robot = 'bigboy'
     tinyboy_state = {
         'ID':1, 
         'platoon':0, 
@@ -453,7 +453,7 @@ if __name__ == "__main__":
             'leader':1
             }
     ]
-    ctrl = Controller(state=tinyboy_state, platoons=platoons, robot=robot)
+    ctrl = Controller(state=bigboy_state, platoons=platoons, robot=robot)
     r = rospy.Rate(20)
     while not rospy.is_shutdown():
         if not ctrl.busy:
