@@ -45,6 +45,7 @@ class Controller:
         self.turn_pub = rospy.Publisher(robot+'/arduino/turn', Int16, queue_size=-1)
         self.stop_pub = rospy.Publisher(robot+'/arduino/stop', Int16, queue_size=-1)
         self.resetStop_pub = rospy.Publisher(robot+'/arduino/resetStop', Int16, queue_size=-1)
+        self.pubAction = rospy.Publisher('action', String, queue_size=10)
         self.left_ir = 0.0
         self.left_inner_ir = 0.0
         self.right_ir = 0.0
@@ -91,13 +92,15 @@ class Controller:
 
         gps_frame = []
         adjusted_speed = 0
-        for i in range(1,len(states)):
+        for i in range(len(states)):
+            if i == int(self.state['ID']):
+                continue
             state = states[i].replace('[', '')
             params = state.split(' ')
             x = float(params[0]) - map_center['x']
             y = float(params[1]) - map_center['y']
-            polar_angle = atan2(y,x)
-            polar_r = sqrt(pow(x,2)+pow(y,2))
+            polar_angle = atan2(y, x)
+            polar_r = sqrt(pow(x, 2) + pow(y, 2))
 
             ## Only avoid robots in platoon
             if i in self.platoons[self.state['platoon']]['robots']:
@@ -107,25 +110,62 @@ class Controller:
                 robot_state['z'] = params[2]
                 robot_state['polar_angle'] = polar_angle
                 robot_state['polar_r'] = polar_r
-                
-                if(self.state['mode'] == SIDE_FORMATION_MODE):
+
+                if (self.state['mode'] == SIDE_FORMATION_MODE):
                     if self.state['platoon_pos'] == 1:
                         if self.state['lane'] == robot_state['lane'] and not self.busy:
                             if self.state['lane'] == 0:
-                                # Shift to outer lane
+                                # Shift to left lane
+                                self.busy = True
+                                self.linefollow_pub.publish(int(-1))
+                                # stop
+                                self.rightWheel_pub.publish(0)
+                                self.leftWheel_pub.publish(0)
+                                # switch left
+                                self.rightWheel_pub.publish(80)
+                                self.leftWheel_pub.publish(0)
+                                rospy.sleep(.59)
+                                self.rightWheel_pub.publish(80)
+                                self.leftWheel_pub.publish(80)
+                                rospy.sleep(1)
+                                self.rightWheel_pub.publish(0)
+                                self.leftWheel_pub.publish(80)
+                                rospy.sleep(.59)
+                                self.busy = False
+                                ctrl.linefollow_pub.publish(int(ctrl.state['speed'][0]))
                                 self.state['lane'] = 1
                             else:
-                                # Shift to inner lane
+                                # Shift to right lane
+                                self.busy = True
+                                self.linefollow_pub.publish(int(-1))
+                                # stop
+                                self.rightWheel_pub.publish(0)
+                                self.leftWheel_pub.publish(0)
+                                # switch right
+                                self.rightWheel_pub.publish(0)
+                                self.leftWheel_pub.publish(80)
+                                rospy.sleep(.59)
+                                self.rightWheel_pub.publish(80)
+                                self.leftWheel_pub.publish(80)
+                                rospy.sleep(1)
+                                self.rightWheel_pub.publish(80)
+                                self.leftWheel_pub.publish(0)
+                                rospy.sleep(.59)
+                                self.busy = False
+                                ctrl.linefollow_pub.publish(int(ctrl.state['speed'][0]))
                                 self.state['lane'] = 0
                         # Break if leader and too far ahead
-                        elif abs(polar_angle - self.state['polar_angle']) > pi/8:
+                        elif abs(polar_angle - self.state['polar_angle']) > pi / 8:
                             ## Wait for robot behind
                             self.break_applied = .5
                         elif self.break_applied != 0:
                             self.break_applied = 0
-                elif(self.state['mode'] == LINE_FOLLOWING_MODE):
-                    if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi/8:
-                        self.break_applied = abs(polar_angle - self.state['polar_angle'])/(pi/8)
+                elif (self.state['mode'] == LINE_FOLLOWING_MODE):
+                    if abs(polar_r - self.state['polar_r']) < 35 and abs(polar_angle - self.state['polar_angle']) < pi / 8:
+                        self.break_applied = abs(polar_angle - self.state['polar_angle']) / (pi / 8)
+                        print("apply break for %s in position (%s,%s)" % (
+                        str(robot_state['ID']), robot_state['x'], robot_state['y']))
+                        print("my position (%s,%s)" % (self.state['x'], self.state['y']))
                     elif self.break_applied != 0:
                         self.break_applied = 0
                 else:
@@ -215,6 +255,88 @@ class Controller:
             self.state['role'] = msg
         elif(action_id == 'f'):
             print("setPosition")
+            sender = int(msg)
+            if self.busy is True:
+                print("currently busy. cannot change leader")
+                self.feedback_pub.publish("0,NOTOK")
+            if sender == 0 and self.busy is False:
+                self.busy = True
+                commandMsg = "" + str(rospy.get_time()) + ",f,0,0,1,1"
+                self.action_pub.publish(commandMsg)
+            else:
+                self.busy = True
+                self.feedback_pub.publish("0,OK")
+                if self.state['mode'] == LINE_FOLLOWING_MODE:
+                    if(self.state['lane'] == 0):
+                        self.linefollow_pub.publish(int(-1))
+                        # stop
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(0)
+                        # switch left
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(0)
+                        rospy.sleep(.59)
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(1)
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(.59)
+
+                        self.linefollow_pub.publish(60)
+                        rospy.sleep(2)
+
+                        self.linefollow_pub.publish(int(-1))
+                        # stop
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(0)
+                        # switch left
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(.59)
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(1)
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(0)
+                        rospy.sleep(.59)
+                    else:
+                        self.linefollow_pub.publish(int(-1))
+                        # stop
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(0)
+                        # switch left
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(.59)
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(1)
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(0)
+                        rospy.sleep(.59)
+
+                        self.linefollow_pub.publish(60)
+                        rospy.sleep(2)
+
+                        self.linefollow_pub.publish(int(-1))
+                        # stop
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(0)
+                        # switch left
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(0)
+                        rospy.sleep(.59)
+                        self.rightWheel_pub.publish(80)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(1)
+                        self.rightWheel_pub.publish(0)
+                        self.leftWheel_pub.publish(80)
+                        rospy.sleep(.59)
+                self.platoons['leader'] = 1
+                self.state['platoon_pos'] = 1
+                self.feedback_pub.publish("0,DONE")
+                self.busy = False
         elif(action_id == 'g'):
             if not self.busy:
                 rospy.loginfo("setSpeed %s"%msg)
@@ -229,7 +351,7 @@ class Controller:
         elif(action_id == 'h'):
             print("setMode")
             if self.busy:
-                print("currently bussy. cannot set mode")
+                print("currently busy. cannot set mode")
             else:
                 payload_params = msg
                 newMode = int(msg)
@@ -361,7 +483,17 @@ class Controller:
             print "heartbeat from %i" %robot_id
 
     def feedback_cb(self,data):
+        params = data.data.split(',')
         rospy.loginfo(rospy.get_caller_id() + 'feedback %s', data.data)
+        if int(params[0]) == 0:
+            if params[1] == "NOTOK":
+                print("could not change other robot! leader remains")
+            elif params[1] == "OK" and self.state['mode'] == LINE_FOLLOWING_MODE:
+                self.linefollow_pub.publish(-1)
+            elif params[1] == "DONE":
+                self.platoons['leader'] = 0
+                self.state['platoon_pos'] = 2
+                self.busy = False
 
     def shrimp_cb(self, data):
         print(data)
@@ -503,7 +635,6 @@ if __name__ == "__main__":
             elif ctrl.state['mode'] == SHRIMP_FOLLOWING_MODE:
                 pass
             else:
-                ctrl.linefollow_pub.publish(int(-1))
                 ctrl.leftWheel_pub.publish(int(ctrl.state['speed'][0]))
                 ctrl.rightWheel_pub.publish(int(ctrl.state['speed'][1]))
         heartbeat_msg = str(rospy.get_time()) + ',' + \
