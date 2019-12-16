@@ -2,6 +2,7 @@
 #include <ros.h>
 #include <ros/time.h>
 #include <std_msgs/Int16.h>
+#include <std_msgs/Int32.h>
 #include <sensor_msgs/Range.h>
 #include <sensor_msgs/Illuminance.h>
 
@@ -31,6 +32,7 @@ double theta = 1.57;
 
 int LINETHRESHOLD = 700;
 bool LINEFOLLOW = false;
+<<<<<<< HEAD
 int SPEED = 50;
 bool ENDOFINTERSEC = false;
 bool stopped = false;
@@ -43,32 +45,53 @@ int turndist = 0;*/
 float wheelDiam = 6.5;   // 6.5cm diameter of wheel
 float wheelCirc = PI * wheelDiam; // Redbot wheel circumference = pi*D
 int countsPerRev = 192;
+=======
+int SPEED = 60;
+>>>>>>> master
 
 // Callbacks
+void laneswitch_cb( const std_msgs::Int16& cmd_msg) {
+  if (cmd_msg.data > 0) {
+    laneswitch(true);
+  } else {
+    laneswitch(false);
+  }
+}
 void linefollow_cb( const std_msgs::Int16& cmd_msg) {
+  float offset = 19.5;
   if (cmd_msg.data > -1) {
     LINEFOLLOW = true;
-    SPEED = cmd_msg.data;
-  } else {
+    SPEED = cmd_msg.data + offset;
+  }else {
     LINEFOLLOW = false;
     SPEED = 0;
     motors.stop();
   }
 }
 void leftWheel_cb( const std_msgs::Int16& cmd_msg) {
+<<<<<<< HEAD
   if (cmd_msg.data > 0) {
     motors.leftMotor(-(cmd_msg.data+3));
   } else if (cmd_msg.data < 0) {
     motors.leftMotor(-(cmd_msg.data-3));
   } else {
     motors.leftMotor(cmd_msg.data);
+=======
+  float offset = 19.5;
+  if(cmd_msg.data > 0){
+    motors.leftMotor(-cmd_msg.data - offset);    
+  }
+  else{
+    motors.leftMotor(-cmd_msg.data);
+>>>>>>> master
   }
 }
 void rightWheel_cb( const std_msgs::Int16& cmd_msg) {
+  float offset = 19.5;
   if (cmd_msg.data > 0) {
-    motors.rightMotor(cmd_msg.data + 3);
+    motors.rightMotor(cmd_msg.data + offset);
   } else if (cmd_msg.data < 0) {
-    motors.rightMotor(cmd_msg.data - 3);
+    motors.rightMotor(cmd_msg.data - offset);
   } else {
     motors.rightMotor(cmd_msg.data);
   }
@@ -78,6 +101,7 @@ void rightWheel_cb( const std_msgs::Int16& cmd_msg) {
   int targetCount = 0;
   int enccount = 0;
 
+<<<<<<< HEAD
   float rotationDist = (abs(cmd_msg.data) / 360) * PI * 2 * 10;
   numRev = (float) rotationDist / wheelCirc;
     
@@ -129,6 +153,26 @@ sensor_msgs::Illuminance illu_left_msg, illu_right_msg;//, illu_left_inner_msg, 
 //ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
 //ros::Publisher pub_right( "bigboy/right", &illu_right_msg);
 
+=======
+//sensor_msgs::Range range_msg;
+sensor_msgs::Illuminance illu_left_msg, illu_right_msg;//, illu_left_inner_msg, illu_right_inner_msg;
+std_msgs::Int16 linefollow_msg, laneswitch_msg;
+std_msgs::Int32 left_enc_msg, right_enc_msg;
+//ros::Publisher pub_range( robot+"/ultrasound", &range_msg);
+ros::Publisher pub_left("tinyboy/left", &illu_left_msg);
+ros::Publisher pub_right("tinyboy/right", &illu_right_msg);
+
+ros::Publisher pub_left_enc("tinyboy/left_enc", &left_enc_msg);
+ros::Publisher pub_right_enc("tinyboy/right_enc", &right_enc_msg);
+//ros::Publisher pub_left_inner("tinyboy/left_inner", &illu_left_inner_msg);
+//ros::Publisher pub_right_inner("tinyboy/right_inner", &illu_right_inner_msg);
+
+
+ros::Subscriber<std_msgs::Int16> lw_sub("tinyboy/arduino/leftWheel", leftWheel_cb);
+ros::Subscriber<std_msgs::Int16> rw_sub("tinyboy/arduino/rightWheel", rightWheel_cb);
+ros::Subscriber<std_msgs::Int16> linefollow_sub("tinyboy/arduino/linefollow", linefollow_cb);
+ros::Subscriber<std_msgs::Int16> laneswitch_sub("tinyboy/arduino/laneswitch", laneswitch_cb);
+>>>>>>> master
 
 void setup() {
   encoder.clearEnc(BOTH);
@@ -137,8 +181,17 @@ void setup() {
   //nh.getHardware()->setBaud(9600);
   nh.initNode();
   //nh.advertise(pub_range);
+<<<<<<< HEAD
   //nh.advertise(pub_left);
   //nh.advertise(pub_right);
+=======
+  nh.advertise(pub_left);
+  nh.advertise(pub_right);
+  nh.advertise(pub_left_enc);
+  nh.advertise(pub_right_enc);
+  //nh.advertise(pub_left_inner);
+  //nh.advertise(pub_right_inner);
+>>>>>>> master
   /*
     range_msg.radiation_type = sensor_msgs::Range::ULTRASOUND;
     range_msg.header.frame_id =  "/ultrasound";
@@ -146,20 +199,28 @@ void setup() {
     range_msg.min_range = 0.0;
     range_msg.max_range = 6.47;
   */
-
   nh.subscribe(lw_sub);
   nh.subscribe(rw_sub);
   nh.subscribe(linefollow_sub);
+<<<<<<< HEAD
   //nh.subscribe(turnDist_sub);
   //nh.subscribe(travelDist_sub);
   //nh.subscribe(turn_sub);
   nh.subscribe(stop_sub);
+=======
+  nh.subscribe(laneswitch_sub);
+>>>>>>> master
 }
 
 void loop() {
   //updateOdom();
   //updateDist();
+<<<<<<< HEAD
   //updateIllu();
+=======
+  updateIllu();
+  updateEnc();
+>>>>>>> master
   if (LINEFOLLOW) {
     linefollowing();
   }
@@ -267,7 +328,81 @@ void linefollowing() {
   delay(0);  // add a delay to decrease sensitivity.
 }
 
+<<<<<<< HEAD
 /*void updateOdom(){
+=======
+void laneswitch(bool gotoleft) {
+  bool lanechanged = false;
+  bool angled = false;
+  int enccount = 0;
+  //Target count is how far the robot will go into the lane?? was 192/4
+  int targetCount;
+  if (gotoleft) {
+    //go left
+    unsigned long starttime;
+    unsigned long endtime;
+    unsigned long diff;
+    starttime = millis();
+    while (!lanechanged) {
+      motors.rightMotor(SPEED);
+      motors.leftMotor(-(SPEED - 30));
+      if (right_outer.read() > LINETHRESHOLD) {
+        lanechanged = true;
+      }
+    }
+    endtime = millis();
+    diff = endtime - starttime;
+    while (right_outer.read() > LINETHRESHOLD) {
+      motors.drive(SPEED);
+    }
+    motors.stop();
+    targetCount = 192 / 4;
+    enccount = encoder.getTicks(LEFT);
+    motors.leftMotor(-SPEED);
+    targetCount += enccount;
+    starttime = millis();
+    endtime = millis();
+    while (endtime-starttime < diff/2) {
+      enccount = encoder.getTicks(LEFT);
+      endtime = millis();
+    }
+  }else{
+    //go right
+    unsigned long starttime;
+    unsigned long endtime;
+    unsigned long diff;
+    starttime = millis();
+    while (!lanechanged) {
+      motors.rightMotor(SPEED-30);
+      motors.leftMotor(-(SPEED));
+      if (left_outer.read() > LINETHRESHOLD) {
+        lanechanged = true;
+      }
+    }
+    endtime = millis();
+    diff = endtime - starttime;
+    while (left_outer.read() > LINETHRESHOLD) {
+      motors.drive(SPEED);
+    }
+    motors.stop();
+    targetCount = 192 / 4;
+    enccount = encoder.getTicks(RIGHT);
+    motors.rightMotor(SPEED);
+    targetCount += enccount;
+    starttime = millis();
+    endtime = millis();
+    while (endtime-starttime < diff/2) {
+      enccount = encoder.getTicks(RIGHT);
+      endtime = millis();
+    }
+  }
+  //finalize lanechange
+  motors.stop();
+}
+
+/*
+  void updateOdom(){
+>>>>>>> master
   // drive in a circle
   double dx = 0.2;
   double dtheta = 0.18;
@@ -315,4 +450,16 @@ void updateIllu() {
   illu_right_msg.header.stamp = nh.now();
   pub_left.publish(&illu_left_msg);
   pub_right.publish(&illu_right_msg);
+<<<<<<< HEAD
 }*/
+=======
+  //pub_right_inner.publish(&illu_right_inner_msg);
+}
+
+void updateEnc() {
+  left_enc_msg.data = encoder.getTicks(LEFT);
+  right_enc_msg.data = encoder.getTicks(RIGHT);
+  pub_left_enc.publish(&left_enc_msg);
+  pub_right_enc.publish(&right_enc_msg);
+}
+>>>>>>> master
