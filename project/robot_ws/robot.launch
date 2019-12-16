@@ -1,0 +1,5 @@
+<launch>
+  <node name="serial_node" pkg="rosserial_python" type="serial_node.py" args="/dev/ttyUSB0"/>
+  <node name="odometry" pkg="odometry" type="odometry.py"/>
+  <node name="controller" pkg="controller" type="controller.py" output="screen"/>
+</launch>

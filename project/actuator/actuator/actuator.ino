@@ -39,10 +39,10 @@ int serialDataRight;
 int serialData;
 int mode;
 int busy;
-boolean newData = false;
+bool newData;
 const byte numChars = 32;
 //char receivedChars[numChars];   // an array to store the received data
-int receivedChars[numChars];
+char receivedChars[numChars];
 
 //movement calculation
 int countsPerRev = 192;   // 4 pairs of N-S x 48:1 gearbox = 192 ticks per wheel rev
@@ -59,28 +59,26 @@ long lCount;
 long rCount;
 
 
-void setup()
-{
+void setup(){
   Serial.begin(9600);
   Serial.setTimeout(50);
   mode = LISTENING;
   busy = 0;
+  newData = false;
   encoder.clearEnc(BOTH);
   rotdistintersec = (rotangleintersec / 360) * PI * 2 * 20;
-  SPEED = 60;
+  SPEED = 50;
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
-  Timer1.initialize(50000); //µs
+  Timer1.initialize(200000); //µs
   Timer1.attachInterrupt(interruptfunc);
 }
-
 void interruptfunc() {
   readdist();
   sendvals();
 }
-
-/*void recvWithEndMarker() {
+void recvWithEndMarker() {
     static byte ndx = 0;
     char endMarker = '\n';
     char rc;
@@ -101,8 +99,7 @@ void interruptfunc() {
             newData = true;
         }
     }
-  }*/
-
+}
 void recString() {
   String rec;
   int i = 0;
@@ -131,27 +128,27 @@ void recString() {
       rec.substring(previdx, idx).toCharArray(help, 10);
       receivedChars[i] = (float)(help[0]);
     }
+    Serial.print(rec);
+    Serial.print(""+(String)sizeof(rec)+"\n");
   }
 }
-
 void loop() {
   //recvWithEndMarker();
   recString();
   lCount = encoder.getTicks(LEFT);
   rCount = encoder.getTicks(RIGHT);
   if (newData) {
-    serialDataAction = (int)receivedChars[0];
+    int sizeOfPayload = receivedChars[0];
+    serialDataAction = (int)receivedChars[1];
     if (serialDataAction == ACTION_SET_SPEED && mode != LINE_FOLLOWING) {
       //Serial.print((String)mode + "," + (String)receivedChars[0] + "," + (String)receivedChars[1] + "," + (String)receivedChars[2] + "\n");
-      serialDataLeft = receivedChars[1];
-      serialDataRight = receivedChars[2];
-
+      serialDataLeft = receivedChars[2];
+      serialDataRight = receivedChars[3];
       motors.leftMotor(-serialDataLeft);
-      motors.rightMotor(serialDataRight);
+      motors.rightMotor(serialDataRight);        
     } else if (serialDataAction == ACTION_SET_SPEED) {
       //Serial.print((String)mode + "," + (String)receivedChars[0] + "," + (String)receivedChars[1] + "\n");
-      serialData = receivedChars[1];
-
+      serialData = receivedChars[2];
       SPEED = serialData;
     } else if (serialDataAction == ACTION_TURN_TRAVEL) {
       //Serial.print((String)mode + "," + (String)receivedChars[0] + "," + (String)receivedChars[1] + "," + (String)receivedChars[2] + "," + (String)receivedChars[3] + "," + (String)receivedChars[4] + "\n");
@@ -184,7 +181,7 @@ void loop() {
       busy = 1;
       intersection(dir);
     } else if (serialDataAction == ACTION_SET_MODE) {
-      serialDataMode = receivedChars[1];
+      serialDataMode = receivedChars[2];
       mode = (int)serialDataMode;
       //Serial.print((String)mode + "," + (String)receivedChars[0] + "," + (String)receivedChars[1] + "\n");
     }
@@ -194,8 +191,6 @@ void loop() {
     linefollowing();
   }
 }
-
-
 //functions for movement
 //line following outer sensors (inbetween two lines)
 void linefollowing() {
@@ -238,7 +233,6 @@ void linefollowing() {
   }
   delay(0);  // add a delay to decrease sensitivity.
 }
-
 //laneswitching
 void laneswitch(bool gotoleft) {
   bool lanechanged = false;
@@ -308,8 +302,6 @@ void laneswitch(bool gotoleft) {
   //finalize lanechange
   motors.stop();
 }
-
-
 //move into intersection
 void intersection(bool gotoleft) {
   int enccount = 0;
@@ -355,7 +347,6 @@ void intersection(bool gotoleft) {
   motors.stop();
   getoutofintersection();
 }
-
 //wait to get out of intersection (either right or left)
 void getoutofintersection() {
   int enccount = 0;
@@ -390,7 +381,6 @@ void getoutofintersection() {
     }
   }
 }
-
 bool waitforinput() {
   while (!newData) {
     recString();
@@ -402,7 +392,6 @@ bool waitforinput() {
     return true;
   }
 }
-
 void readdist() {
   // trigger sensor
   digitalWrite(TRIG_PIN, LOW);
@@ -415,7 +404,6 @@ void readdist() {
   duration = pulseIn(ECHO_PIN, HIGH);
   distance = (duration / 2) * 0.03432;
 }
-
 void sendvals() {
   //lCount = encoder.getTicks(LEFT);
   //rCount = encoder.getTicks(RIGHT);
@@ -423,11 +411,10 @@ void sendvals() {
   volatile float rWheelDist = ((rCount / countsPerRev) * wheelCirc);
 
   // Write something to serial
-  Serial.print((String)busy+","+(String)lCount+","+(String)rCount+","+(String)distance+"\n");
+  //Serial.print((String)busy+","+(String)lCount+","+(String)rCount+","+(String)distance+"\n");
+  Serial.flush();
 }
-
-void driveDistance(float distance, int motorPower)
-{
+void driveDistance(float distance, int motorPower) {
   long lCount = 0;
   long rCount = 0;
   float numRev;
@@ -445,7 +432,6 @@ void driveDistance(float distance, int motorPower)
   }
   motors.stop();
 }
-
 void driveAngle(float angle, int motorPower) {
   long lCount = 0;
   long rCount = 0;
