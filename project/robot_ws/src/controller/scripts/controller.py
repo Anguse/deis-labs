@@ -119,6 +119,7 @@ class Controller:
                         if self.state['lane'] == robot_state['lane'] and not self.busy:
                             if self.state['lane'] == FOLLOWER_LANE:
                                 # Shift to left lane
+                                '''
                                 self.busy = True
                                 self.linefollow_pub.publish(int(-1))
                                 # stop
@@ -136,9 +137,11 @@ class Controller:
                                 rospy.sleep(.59)
                                 self.busy = False
                                 self.linefollow_pub.publish(int(self.state['speed'][0]))
+                                '''
                                 self.state['lane'] = FOLLOWER_LANE
                             else:
                                 # Shift to right lane
+                                '''
                                 self.busy = True
                                 self.linefollow_pub.publish(int(-1))
                                 # stop
@@ -156,6 +159,7 @@ class Controller:
                                 rospy.sleep(.59)
                                 self.busy = False
                                 self.linefollow_pub.publish(int(self.state['speed'][0]))
+                                '''
                                 self.state['lane'] = LEADER_LANE
                         # Break if leader and too far ahead
                         elif abs(polar_angle - self.state['polar_angle']) > pi / 8:
@@ -219,7 +223,7 @@ class Controller:
             rospy.loginfo("current lane:%i, new_lane:%i"%(self.state['lane'], newLane))
             if self.state['lane'] < newLane:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(-1)
+                    self.linefollow_pub.publish(-1)
                 self.busy = True
                 self.laneSwitch_pub.publish(1)
                 '''
@@ -238,11 +242,12 @@ class Controller:
                 rospy.sleep(.58)
                 '''
                 self.busy = False
+                self.state['lane'] = newLane
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(50)
+                    self.linefollow_pub.publish(50)
             elif self.state['lane'] > newLane:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(-1)
+                    self.linefollow_pub.publish(-1)
                 self.busy = True
                 self.laneSwitch_pub.publish(0)
                 '''
@@ -255,16 +260,15 @@ class Controller:
                 rospy.sleep(.58)
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(80)
-                rospy.sleep(1)
+                rospy.sleep(.8)
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(0)
                 rospy.sleep(.58)
                 '''
                 self.busy = False
+                self.state['lane'] = newLane
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
-                    self.lineFollow_pub.publish(50)
-            else:
-                rospy.loginfo("lanechange only allowed in linefollowing mode")
+                    self.linefollow_pub.publish(50)
         elif(action_id == 'e'):
             print("setRole")
             self.state['role'] = msg

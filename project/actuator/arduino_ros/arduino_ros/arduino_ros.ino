@@ -36,7 +36,7 @@ bool LINEFOLLOW = false;
 bool ENDOFINTERSEC = false;
 bool stopped = false;
 
-int SPEED = 60;
+int SPEED = 50;
 
 // Callbacks
 void laneswitch_cb( const std_msgs::Int16& cmd_msg) {
@@ -51,7 +51,7 @@ void linefollow_cb( const std_msgs::Int16& cmd_msg) {
   if (cmd_msg.data > -1) {
     LINEFOLLOW = true;
     SPEED = cmd_msg.data + offset;
-  }else {
+  } else {
     LINEFOLLOW = false;
     SPEED = 0;
     motors.stop();
@@ -59,9 +59,9 @@ void linefollow_cb( const std_msgs::Int16& cmd_msg) {
 }
 void leftWheel_cb( const std_msgs::Int16& cmd_msg) {
   if (cmd_msg.data > 0) {
-    motors.leftMotor(-(cmd_msg.data+3));
+    motors.leftMotor(-(cmd_msg.data + 3));
   } else if (cmd_msg.data < 0) {
-    motors.leftMotor(-(cmd_msg.data-3));
+    motors.leftMotor(-(cmd_msg.data - 3));
   } else {
     motors.leftMotor(cmd_msg.data);
   }
@@ -78,26 +78,26 @@ void rightWheel_cb( const std_msgs::Int16& cmd_msg) {
 }
 
 void stop_cb(const std_msgs::Int16& cmd_msg) {
-    if (!stopped){
-      stopped = true;
-      motors.stop();
-    } else{
-      stopped = false;
-    }
+  if (!stopped) {
+    stopped = true;
+    motors.stop();
+  } else {
+    stopped = false;
+  }
 }
 
-ros::Subscriber<std_msgs::Int16> lw_sub("bigboy/arduino/leftWheel", leftWheel_cb);
-ros::Subscriber<std_msgs::Int16> rw_sub("bigboy/arduino/rightWheel", rightWheel_cb);
-ros::Subscriber<std_msgs::Int16> linefollow_sub("bigboy/arduino/linefollow", linefollow_cb);
-ros::Subscriber<std_msgs::Int16> stop_sub("bigboy/arduino/stop", stop_cb);
+ros::Subscriber<std_msgs::Int16> lw_sub("tinyboy/arduino/leftWheel", leftWheel_cb);
+ros::Subscriber<std_msgs::Int16> rw_sub("tinyboy/arduino/rightWheel", rightWheel_cb);
+ros::Subscriber<std_msgs::Int16> linefollow_sub("tinyboy/arduino/linefollow", linefollow_cb);
+ros::Subscriber<std_msgs::Int16> stop_sub("tinyboy/arduino/stop", stop_cb);
 ros::Subscriber<std_msgs::Int16> laneswitch_sub("tinyboy/arduino/laneswitch", laneswitch_cb);
 
 sensor_msgs::Range range_msg;
 sensor_msgs::Illuminance illu_left_msg, illu_right_msg;//, illu_left_inner_msg, illu_right_inner_msg;
 //std_msgs::Int16 linefollow_msg;
-//ros::Publisher pub_range( "bigboy/ultrasound", &range_msg);
-//ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
-//ros::Publisher pub_right( "bigboy/right", &illu_right_msg);
+//ros::Publisher pub_range( "tinyboy/ultrasound", &range_msg);
+//ros::Publisher pub_left( "tinyboy/left", &illu_left_msg);
+//ros::Publisher pub_right( "tinyboy/right", &illu_right_msg);
 
 
 void setup() {
@@ -138,10 +138,10 @@ void loop() {
   }
   /*if (turn){
     turndistance();
-  }
-  if (travel){
+    }
+    if (travel){
     drivedistance();
-  }*/
+    }*/
   nh.spinOnce();
   //delay(1);
 }
@@ -150,7 +150,7 @@ void loop() {
   float numRev;
   int targetCount = 0;
   int enccount = 0;
-  
+
   numRev = (float) traveldist / wheelCirc;
   targetCount = numRev * countsPerRev;
   enccount = encoder.getTicks(RIGHT);
@@ -162,16 +162,16 @@ void loop() {
   motors.stop();
   travel = false;
   traveldist = 0;
-}
+  }
 
-void turndistance(){
+  void turndistance(){
   float numRev;
   int targetCount = 0;
   int enccount = 0;
 
   float rotationDist = (abs(turndist) / 360) * PI * 2 * 10;
   numRev = (float) rotationDist / wheelCirc;
-    
+
   if (turndist > 0) {
       motors.leftMotor(SPEED);
       motors.rightMotor(SPEED);
@@ -179,7 +179,7 @@ void turndistance(){
       motors.leftMotor(-SPEED);
       motors.rightMotor(-SPEED);
   }
-    
+
   targetCount = numRev * countsPerRev;
   enccount = encoder.getTicks(RIGHT);
   targetCount += enccount;
@@ -189,7 +189,7 @@ void turndistance(){
   motors.stop();
   turn = false;
   turndist = 0;
-}*/
+  }*/
 
 void linefollowing() {
   //custom controls
@@ -233,8 +233,8 @@ void linefollowing() {
   else
   {
     if (!stopped) {
-        motors.leftMotor(leftSpeed);
-        motors.rightMotor(rightSpeed);
+      motors.leftMotor(leftSpeed);
+      motors.rightMotor(rightSpeed);
     }
   }
   delay(0);  // add a delay to decrease sensitivity.
@@ -258,24 +258,32 @@ void laneswitch(bool gotoleft) {
       if (right_outer.read() > LINETHRESHOLD) {
         lanechanged = true;
       }
-    }
-    endtime = millis();
-    diff = endtime - starttime;
-    while (right_outer.read() > LINETHRESHOLD) {
-      motors.drive(SPEED);
-    }
-    motors.stop();
-    targetCount = 192 / 4;
-    enccount = encoder.getTicks(LEFT);
-    motors.leftMotor(-SPEED);
-    targetCount += enccount;
-    starttime = millis();
-    endtime = millis();
-    while (endtime-starttime < diff/2) {
-      enccount = encoder.getTicks(LEFT);
+      starttime = millis();
+      while (!lanechanged) {
+        motors.rightMotor(SPEED+20);
+        motors.leftMotor(-(SPEED + 30));
+        if (right_outer.read() > LINETHRESHOLD) {
+          lanechanged = true;
+        }
+      }
       endtime = millis();
+      diff = endtime - starttime;
+      while (right_outer.read() > LINETHRESHOLD) {
+        motors.drive(SPEED);
+      }
+      motors.stop();
+      targetCount = 192 / 4;
+      enccount = encoder.getTicks(LEFT);
+      motors.leftMotor(-SPEED);
+      targetCount += enccount;
+      starttime = millis();
+      endtime = millis();
+      while (endtime - starttime < diff / 2) {
+        enccount = encoder.getTicks(LEFT);
+        endtime = millis();
+      }
     }
-  }else{
+  } else {
     //go right
     unsigned long starttime;
     unsigned long endtime;
@@ -300,7 +308,7 @@ void laneswitch(bool gotoleft) {
     targetCount += enccount;
     starttime = millis();
     endtime = millis();
-    while (endtime-starttime < diff/2) {
+    while (endtime - starttime < diff / 3) {
       enccount = encoder.getTicks(RIGHT);
       endtime = millis();
     }
@@ -331,10 +339,10 @@ void laneswitch(bool gotoleft) {
   t.header.stamp = nh.now();
 
   broadcaster.sendTransform(t);
-}
+  }
 
 
-void updateDist(){
+  void updateDist(){
   // trigger sensor
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(5);
@@ -349,9 +357,9 @@ void updateDist(){
   range_msg.range = distance;
   range_msg.header.stamp = nh.now();
   pub_range.publish(&range_msg);
-}
+  }
 
-void updateIllu() {
+  void updateIllu() {
   illu_left_msg.illuminance = left_outer.read();
   illu_right_msg.illuminance = right_outer.read();
   illu_left_msg.header.stamp = nh.now();
@@ -359,11 +367,11 @@ void updateIllu() {
   pub_left.publish(&illu_left_msg);
   pub_right.publish(&illu_right_msg);
   //pub_right_inner.publish(&illu_right_inner_msg);
-}*/
-
-void updateEnc() {
+  }*/
+/*
+  void updateEnc() {
   left_enc_msg.data = encoder.getTicks(LEFT);
   right_enc_msg.data = encoder.getTicks(RIGHT);
   pub_left_enc.publish(&left_enc_msg);
   pub_right_enc.publish(&right_enc_msg);
-}
+  }*/
