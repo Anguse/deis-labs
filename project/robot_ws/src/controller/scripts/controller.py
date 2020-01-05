@@ -45,7 +45,6 @@ class Controller:
         self.linefollow_pub = rospy.Publisher(robot+'/arduino/linefollow', Int16, queue_size=-1)
         self.stop_pub = rospy.Publisher(robot+'/arduino/stop', Int16, queue_size=-1)
         self.resetStop_pub = rospy.Publisher(robot+'/arduino/resetStop', Int16, queue_size=-1)
-        self.pubAction = rospy.Publisher('action', String, queue_size=10)
         self.laneSwitch_pub = rospy.Publisher(robot+'/arduino/laneswitch', Int16, queue_size=10)
         self.left_ir = 0.0
         self.left_inner_ir = 0.0
