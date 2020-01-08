@@ -86,17 +86,17 @@ void stop_cb(const std_msgs::Int16& cmd_msg) {
   }
 }
 
-ros::Subscriber<std_msgs::Int16> lw_sub("tinyboy/arduino/leftWheel", leftWheel_cb);
-ros::Subscriber<std_msgs::Int16> rw_sub("tinyboy/arduino/rightWheel", rightWheel_cb);
-ros::Subscriber<std_msgs::Int16> linefollow_sub("tinyboy/arduino/linefollow", linefollow_cb);
-ros::Subscriber<std_msgs::Int16> stop_sub("tinyboy/arduino/stop", stop_cb);
-ros::Subscriber<std_msgs::Int16> laneswitch_sub("tinyboy/arduino/laneswitch", laneswitch_cb);
+ros::Subscriber<std_msgs::Int16> lw_sub("bigboy/arduino/leftWheel", leftWheel_cb);
+ros::Subscriber<std_msgs::Int16> rw_sub("bigboy/arduino/rightWheel", rightWheel_cb);
+ros::Subscriber<std_msgs::Int16> linefollow_sub("bigboy/arduino/linefollow", linefollow_cb);
+ros::Subscriber<std_msgs::Int16> stop_sub("bigboy/arduino/stop", stop_cb);
+ros::Subscriber<std_msgs::Int16> laneswitch_sub("bigboy/arduino/laneswitch", laneswitch_cb);
 
 sensor_msgs::Range range_msg;
 sensor_msgs::Illuminance illu_left_msg, illu_right_msg;//, illu_left_inner_msg, illu_right_inner_msg;
 //std_msgs::Int16 linefollow_msg;
-//ros::Publisher pub_range( "tinyboy/ultrasound", &range_msg);
-//ros::Publisher pub_left( "tinyboy/left", &illu_left_msg);
+//ros::Publisher pub_range( "bigboy/ultrasound", &range_msg);
+//ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
 //ros::Publisher pub_right( "tinyboy/right", &illu_right_msg);
 
 
@@ -246,7 +246,7 @@ void laneswitch(bool gotoleft) {
   int enccount = 0;
   //Target count is how far the robot will go into the lane?? was 192/4
   int targetCount;
-  if (gotoleft) {
+  if (gotoleft){
     //go left
     unsigned long starttime;
     unsigned long endtime;
@@ -254,36 +254,28 @@ void laneswitch(bool gotoleft) {
     starttime = millis();
     while (!lanechanged) {
       motors.rightMotor(SPEED);
-      motors.leftMotor(-(SPEED - 30));
+      motors.leftMotor(-(SPEED-30));
       if (right_outer.read() > LINETHRESHOLD) {
         lanechanged = true;
       }
-      starttime = millis();
-      while (!lanechanged) {
-        motors.rightMotor(SPEED+20);
-        motors.leftMotor(-(SPEED + 30));
-        if (right_outer.read() > LINETHRESHOLD) {
-          lanechanged = true;
-        }
-      }
-      endtime = millis();
-      diff = endtime - starttime;
-      while (right_outer.read() > LINETHRESHOLD) {
-        motors.drive(SPEED);
-      }
-      motors.stop();
-      targetCount = 192 / 4;
-      enccount = encoder.getTicks(LEFT);
-      motors.leftMotor(-SPEED);
-      targetCount += enccount;
-      starttime = millis();
-      endtime = millis();
-      while (endtime - starttime < diff / 2) {
-        enccount = encoder.getTicks(LEFT);
-        endtime = millis();
-      }
     }
-  } else {
+    endtime = millis();
+    diff = endtime - starttime;
+    while (right_outer.read() > LINETHRESHOLD) {
+      motors.drive(SPEED);
+    }
+    motors.stop();
+    targetCount = 192 / 4;
+    enccount = encoder.getTicks(RIGHT);
+    motors.leftMotor(-SPEED);
+    targetCount += enccount;
+    starttime = millis();
+    endtime = millis();
+    while (endtime - starttime < diff / 2) {
+      enccount = encoder.getTicks(RIGHT);
+      endtime = millis();
+    }
+  }else {
     //go right
     unsigned long starttime;
     unsigned long endtime;

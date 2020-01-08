@@ -221,12 +221,14 @@ class Controller:
         elif(action_id == 'd'):
             print("setLane")
             newLane = int(msg)
-            rospy.loginfo("current lane:%i, new_lane:%i"%(self.state['lane'], newLane))
+            rospy.loginfo("current lane:%i, new_lane:%i" % (self.state['lane'], newLane))
             if self.state['lane'] < newLane:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.linefollow_pub.publish(-1)
                 self.busy = True
-                #self.laneSwitch_pub.publish(1)
+                self.laneSwitch_pub.publish(1)
+                rospy.sleep(2)
+                '''
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
@@ -240,6 +242,7 @@ class Controller:
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(80)
                 rospy.sleep(.58)
+                '''
                 self.busy = False
                 self.state['lane'] = newLane
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
@@ -248,7 +251,9 @@ class Controller:
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
                     self.linefollow_pub.publish(-1)
                 self.busy = True
-                #self.laneSwitch_pub.publish(0)
+                self.laneSwitch_pub.publish(0)
+                rospy.sleep(2)
+                '''
                 # stop
                 self.rightWheel_pub.publish(0)
                 self.leftWheel_pub.publish(0)
@@ -258,10 +263,11 @@ class Controller:
                 rospy.sleep(.58)
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(80)
-                rospy.sleep(1)
+                rospy.sleep(.8)
                 self.rightWheel_pub.publish(80)
                 self.leftWheel_pub.publish(0)
                 rospy.sleep(.58)
+                '''
                 self.busy = False
                 self.state['lane'] = newLane
                 if self.state['mode'] == LINE_FOLLOWING_MODE or self.state['mode'] == SIDE_FORMATION_MODE:
