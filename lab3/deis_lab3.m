@@ -63,7 +63,8 @@ for i=1:1931
     crispy_fusion_y(i) = p(floor(ref_pos(i,3)))*cam_pos(i,3)+q(floor(ref_pos(i,3)))*magic_pos(i,3);
 end
 subplot(2,1,1);
-plot(crispy_fusion_x, crispy_fusion_y)
+plot(crispy_fusion_x, crispy_fusion_y);
+title('fusion with crisp sets');
 %g1 = fismf("trapmf", [[2 2 4 4],[6 6 8 8]]);
 %g2 = fismf("trapmf", [8 8 10 10]);
 %evalmf(g,5)
@@ -86,7 +87,8 @@ for i=1:1931
     crispy_fusion_y1(i) = p1(floor(ref_pos(i,3)))*cam_pos(i,3)+q1(floor(ref_pos(i,3)))*magic_pos(i,3);
 end
 subplot(2,1,2);
-plot(crispy_fusion_x1, crispy_fusion_y1)
+plot(crispy_fusion_x1, crispy_fusion_y1);
+title('fusion with fuzzy sets');
 
 %% Task 4
 % given variables
@@ -149,10 +151,6 @@ subplot(2,1,2);
 plot(x_est, y_est);
 title('Estimated Position');
 
-figure()
-plot(1:1:19310, x_est);
-figure()
-plot(1:1:19310, theta_est);
 
 %% Task 5a
 updated_pos_x = zeros(1,19310);
@@ -207,9 +205,12 @@ for i=1:19309
 end
 
 figure()
-subplot(2,1,1);
+subplot(3,1,1);
 plot(ref_pos(:,2), ref_pos(:,3));
 title('Reference position');
-subplot(2,1,2);
+subplot(3,1,2);
+plot(updated_pos_x, updated_pos_y);
+title('Estimated Position with updates');
+subplot(3,1,3);
 plot(updated_pos_del_x, updated_pos_del_y);
 title('Estimated Position with delayed updates');
