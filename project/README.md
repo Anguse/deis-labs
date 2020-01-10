@@ -1,5 +1,7 @@
-###### Shrimp robot ######
-![Alt Text](20200110_114120.gif)
-<br>
+# Architecture
 ![Architecture](overview.png)
-<iframe src="https://drive.google.com/file/d/1B5MNNrrBa-8soFvo6MNlbjADOPmdpMNR/preview" width="640" height="480"></iframe>
+# Preview
+![Alt Text](20200110_114120.gif)
+# Videos:
+https://drive.google.com/drive/u/0/folders/14NMTmbMo2ZO8c_-W1nDg7VdcChlM1xS8
+<br>
