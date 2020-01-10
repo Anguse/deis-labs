@@ -75,7 +75,7 @@ def main():
 			commandMsg = ""+ str(rospy.get_time()) + ",h,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",3"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
-
+		
 		elif(key== 'i'):
 			# Turn and travel
 			print "Pressed i: turn and travel"
@@ -102,6 +102,11 @@ def main():
 			print "Pressed k: intersection"
 			msg = ""
 			commandMsg = ""+ str(rospy.get_time()) + ',' + key + ',' + str(source_robot_id) + ',' + str(target_robot_platoon_id) + ',' + str(target_robot_id) + ',' + msg
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
+		elif(key=='w'):
+			print "Pressed w: change of leader"
+			commandMsg = ""+ str(rospy.get_time()) + ",f,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",0"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 

@@ -86,17 +86,17 @@ void stop_cb(const std_msgs::Int16& cmd_msg) {
   }
 }
 
-ros::Subscriber<std_msgs::Int16> lw_sub("bigboy/arduino/leftWheel", leftWheel_cb);
-ros::Subscriber<std_msgs::Int16> rw_sub("bigboy/arduino/rightWheel", rightWheel_cb);
-ros::Subscriber<std_msgs::Int16> linefollow_sub("bigboy/arduino/linefollow", linefollow_cb);
-ros::Subscriber<std_msgs::Int16> stop_sub("bigboy/arduino/stop", stop_cb);
-ros::Subscriber<std_msgs::Int16> laneswitch_sub("bigboy/arduino/laneswitch", laneswitch_cb);
+ros::Subscriber<std_msgs::Int16> lw_sub("tinyboy/arduino/leftWheel", leftWheel_cb);
+ros::Subscriber<std_msgs::Int16> rw_sub("tinyboy/arduino/rightWheel", rightWheel_cb);
+ros::Subscriber<std_msgs::Int16> linefollow_sub("tinyboy/arduino/linefollow", linefollow_cb);
+ros::Subscriber<std_msgs::Int16> stop_sub("tinyboy/arduino/stop", stop_cb);
+ros::Subscriber<std_msgs::Int16> laneswitch_sub("tinyboy/arduino/laneswitch", laneswitch_cb);
 
 sensor_msgs::Range range_msg;
 sensor_msgs::Illuminance illu_left_msg, illu_right_msg;//, illu_left_inner_msg, illu_right_inner_msg;
 //std_msgs::Int16 linefollow_msg;
-//ros::Publisher pub_range( "bigboy/ultrasound", &range_msg);
-//ros::Publisher pub_left( "bigboy/left", &illu_left_msg);
+//ros::Publisher pub_range( "tinyboy/ultrasound", &range_msg);
+//ros::Publisher pub_left( "tinyboy/left", &illu_left_msg);
 //ros::Publisher pub_right( "tinyboy/right", &illu_right_msg);
 
 
@@ -241,6 +241,9 @@ void linefollowing() {
 }
 
 void laneswitch(bool gotoleft) {
+  unsigned long starttime;
+  unsigned long endtime;
+  unsigned long diff;
   bool lanechanged = false;
   bool angled = false;
   int enccount = 0;
@@ -248,9 +251,7 @@ void laneswitch(bool gotoleft) {
   int targetCount;
   if (gotoleft){
     //go left
-    unsigned long starttime;
-    unsigned long endtime;
-    unsigned long diff;
+    
     starttime = millis();
     while (!lanechanged) {
       motors.rightMotor(SPEED);
@@ -277,9 +278,6 @@ void laneswitch(bool gotoleft) {
     }
   }else {
     //go right
-    unsigned long starttime;
-    unsigned long endtime;
-    unsigned long diff;
     starttime = millis();
     while (!lanechanged) {
       motors.rightMotor(SPEED-30);

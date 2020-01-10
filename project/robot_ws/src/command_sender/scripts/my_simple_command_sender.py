@@ -18,6 +18,7 @@ def main():
 	target_robot_id = 1
 	target_robot_platoon_id = 0
 	source_robot_id = 0
+	speed = 80
 	myCommandSender = commandSender()
 
 	while True:
@@ -32,22 +33,22 @@ def main():
 			break
 		elif(key== 'f'):
 			print "Pressed f: Go forward"
-			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",60;60" #set speed, from GPS, to robots with no platoon, all robots, speed should be 255 left wheel, 255 right wheel
+			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",%d;%d"%(speed,speed) #set speed, from GPS, to robots with no platoon, all robots, speed should be 255 left wheel, 255 right wheel
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== 'b'):
 			print "Pressed b: Back"
-			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",-60;-60" #set speed, from GPS, to robots with no platoon, all robots, speed should be -255 left wheel, -255 right wheel
+			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",%d;%d"%(-speed,-speed) #set speed, from GPS, to robots with no platoon, all robots, speed should be -255 left wheel, -255 right wheel
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== 'l'):
 			print "Pressed l: Turn left"
-			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",0;60" #set speed, from GPS, to robots with no platoon, all robots, speed should be 0 left wheel, 255 right wheel
+			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",%d;%d"%(0,speed) #set speed, from GPS, to robots with no platoon, all robots, speed should be 0 left wheel, 255 right wheel
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== 'r'):
 			print "Pressed r: Turn right"
-			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",60;0" #set speed, from GPS, to robots with no platoon, all robots, speed should be 0 left wheel, 255 right wheel
+			commandMsg = ""+ str(rospy.get_time()) + ",g,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",%d;%d"%(speed,0) #set speed, from GPS, to robots with no platoon, all robots, speed should be 0 left wheel, 255 right wheel
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 		elif(key== 's'):
@@ -102,6 +103,11 @@ def main():
 			print "Pressed k: intersection"
 			msg = ""
 			commandMsg = ""+ str(rospy.get_time()) + ',' + key + ',' + str(source_robot_id) + ',' + str(target_robot_platoon_id) + ',' + str(target_robot_id) + ',' + msg
+			myCommandSender.pubAction.publish(commandMsg)
+			print "sent command: ", commandMsg
+		elif(key=='w'):
+			print "Pressed w: change of leader"
+			commandMsg = ""+ str(rospy.get_time()) + ",f,"+str(source_robot_id)+","+str(target_robot_platoon_id)+","+str(target_robot_id)+",0"
 			myCommandSender.pubAction.publish(commandMsg)
 			print "sent command: ", commandMsg
 
